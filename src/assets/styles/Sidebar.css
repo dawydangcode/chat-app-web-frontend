@@ -1,0 +1,259 @@
+.sidebar {
+  width: 300px;
+  height: 100vh;
+  background-color: #FFFFFF;
+  border-right: 1px solid #ddd;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-header {
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #ddd;
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  margin-right: 10px;
+  cursor: pointer;
+}
+
+.sidebar-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.sidebar-actions button {
+  padding: 5px 10px;
+  border: none;
+  background: #005AE0;
+  color: white;
+  cursor: pointer;
+}
+
+.sidebar-actions button.active {
+  background-color: #153f7d;
+  border-radius: 5px;
+}
+
+/* Tab Tin nhắn */
+.chat-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.chat-list-header {
+  padding: 10px;
+  display: flex;
+  gap: 5px;
+}
+
+.chat-list-header input {
+  flex: 1;
+  padding: 5px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+}
+
+.action-btn {
+  padding: 5px;
+  border: none;
+  background: #005AE0;
+  color: white;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.chat-list-tabs {
+  display: flex;
+  gap: 5px;
+  padding: 10px;
+}
+
+.chat-list-tabs button {
+  padding: 5px 10px;
+  border: none;
+  background: #005AE0;
+  color: white;
+  cursor: pointer;
+}
+
+.chat-list-tabs button.active {
+  background-color: #153f7d;
+  border-radius: 5px;
+}
+
+.chat-item {
+  padding: 10px;
+  border-bottom: 1px solid #ddd;
+  cursor: pointer;
+}
+
+.chat-item.unread {
+  background-color: #e0f7fa;
+}
+
+.chat-name {
+  font-weight: bold;
+}
+
+.last-message {
+  color: #666;
+  font-size: 0.9em;
+}
+
+/* Tab Danh bạ */
+.contacts {
+  padding: 10px;
+}
+
+.contact-item {
+  padding: 10px;
+  border-bottom: 1px solid #ddd;
+}
+
+.contact-phone {
+  color: #666;
+  font-size: 0.9em;
+}
+
+/* Tab Cài đặt */
+.settings {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.profile-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.cover-container {
+  position: relative;
+  width: 100%;
+  height: 150px;
+}
+
+.cover-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+.cover-photo-placeholder {
+  width: 100%;
+  height: 100%;
+  background-color: #e0e0e0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 10px;
+}
+
+.cover-photo-placeholder p {
+  color: #666;
+}
+
+.avatar-profile {
+  position: absolute;
+  bottom: -40px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 3px solid #f5f5f5;
+}
+
+.profile-info {
+  width: 100%;
+  text-align: left;
+  margin-top: 50px;
+}
+
+.profile-info p {
+  margin: 10px 0;
+  font-size: 1em;
+}
+
+.profile-edit {
+  width: 100%;
+  margin-top: 50px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.profile-edit label {
+  font-weight: bold;
+  margin-top: 5px;
+}
+
+.profile-edit input,
+.profile-edit select {
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  width: 100%;
+}
+
+.avatar-upload {
+  margin-bottom: 10px;
+}
+
+.edit-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.edit-btn,
+.save-btn,
+.change-password-btn {
+  padding: 10px 20px;
+  background-color: #005AE0;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.edit-btn:hover,
+.save-btn:hover,
+.change-password-btn:hover {
+  background-color: #003f99;
+}
+
+.cancel-btn {
+  padding: 10px 20px;
+  background-color: #e63946;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.cancel-btn:hover {
+  background-color: #b32d38;
+}
+
+.logout-btn {
+  padding: 10px 20px;
+  background-color: #e63946;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.logout-btn:hover {
+  background-color: #b32d38;
+}

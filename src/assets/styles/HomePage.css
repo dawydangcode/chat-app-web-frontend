@@ -1,0 +1,23 @@
+.home-page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    background-color: #f0f2f5;
+  }
+  
+  .home-page h1 {
+    font-size: 2.5rem;
+    color: #007bff;
+    margin-bottom: 2rem;
+    margin-left: 40px;
+  }
+
+  .logo {
+    width: 200px;  /* Điều chỉnh kích thước ảnh */
+    height: 200px;
+    display: block; /* Đảm bảo ảnh không bị ẩn */
+    margin-left: 160px; /* Căn giữa ảnh */
+    margin-bottom: -40px; /* Khoảng cách giữa ảnh và tiêu đề */
+  }
