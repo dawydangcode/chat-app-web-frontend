@@ -11,6 +11,7 @@ const LoginForm = ({ onSwitchToRegister, onSwitchToForgotPassword, onLoginSucces
     const phoneRegex = /^(0|\+?84)\d{9}$/;
     return phoneRegex.test(phone);
   };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -20,21 +21,35 @@ const LoginForm = ({ onSwitchToRegister, onSwitchToForgotPassword, onLoginSucces
       return;
     }
     if (!validatePhoneNumber(phoneNumber)) {
-        setError('Số điện thoại không đúng');
-        return;
+      setError('Số điện thoại không đúng');
+      return;
     }
-    if(!password){
+    if (!password) {
       setError('Thiếu mật khẩu');
       return;
     }
+
     try {
       const response = await login(phoneNumber, password);
       if (response.success) {
-        localStorage.setItem('token', response.token); // Lưu token
+        // Lưu token vào localStorage
+        localStorage.setItem('token', response.token);
+
+        // Lưu thông tin người dùng vào localStorage
+        const userData = {
+          userId: response.user.id, // Lưu userId
+          name: response.user.name || '',
+          phoneNumber: response.user.phoneNumber || '',
+        };
+        localStorage.setItem('user', JSON.stringify(userData));
+
+        console.log('✅ Đã lưu user vào localStorage:', userData);
+
+        // Gọi callback đăng nhập thành công
         onLoginSuccess();
       }
-    } catch (err) {   
-        setError(err.response?.data?.error|| 'Đăng nhập thất bại!');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Đăng nhập thất bại!');
     }
   };
 

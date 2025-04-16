@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import '../../assets/styles/Sidebar.css';
 
-const Sidebar = ({ onSelectChat }) => {
+const Sidebar = ({ onSelectChat, fetchChatsTrigger }) => {
   const [activeTab, setActiveTab] = useState('messages');
   const [chats, setChats] = useState([]);
   const [contacts, setContacts] = useState([]);
@@ -29,85 +29,156 @@ const Sidebar = ({ onSelectChat }) => {
     confirmPassword: '',
   });
   const navigate = useNavigate();
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const currentUserId = currentUser?.userId;
 
-  // Lấy dữ liệu từ backend
+  const fetchChats = async () => {
+    console.log('🔄 Bắt đầu lấy tóm tắt hội thoại');
+
+    if (!currentUserId) {
+      console.log('⚠️ currentUserId không tồn tại');
+      alert('Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại.');
+      navigate('/login');
+      return;
+    }
+
+    const token = localStorage.getItem('token');
+    if (!token || token === 'undefined' || !token.startsWith('eyJ')) {
+      console.log('⚠️ Token không hợp lệ khi lấy tóm tắt hội thoại');
+      alert('Vui lòng đăng nhập để xem danh sách cuộc trò chuyện.');
+      navigate('/login');
+      return;
+    }
+
+    try {
+      console.log('🌐 Gửi API request tới /api/messages/summary');
+      const response = await axios.get('http://localhost:3000/api/messages/summary', {
+        headers: { Authorization: `Bearer ${token.trim()}` },
+      });
+
+      console.log('📥 API response summary:', response.data);
+
+      if (response.data && response.data.success) {
+        const conversations = response.data.data?.conversations || [];
+        console.log(`✅ Đã lấy được ${conversations.length} cuộc trò chuyện`);
+
+        const formattedChats = conversations.map((conv) => ({
+          id: conv.otherUserId,
+          name: conv.displayName || 'Không có tên',
+          phoneNumber: conv.phoneNumber || '',
+          avatar: conv.avatar || '/assets/images/avatar.png',
+          lastMessage: conv.lastMessage?.content || 'Chưa có tin nhắn',
+          timestamp: conv.lastMessage?.createdAt || new Date().toISOString(),
+          unread: conv.unreadCount > 0,
+          unreadCount: conv.unreadCount || 0,
+          targetUserId: conv.otherUserId,
+        }));
+
+        setChats(formattedChats);
+      } else {
+        console.error('❌ Lỗi khi lấy tóm tắt hội thoại:', response.data?.message);
+        alert('Không thể lấy danh sách cuộc trò chuyện. Vui lòng thử lại sau.');
+      }
+    } catch (error) {
+      console.error('❌ Lỗi khi lấy tóm tắt hội thoại:', error);
+      if (error.response?.status === 401) {
+        alert('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        navigate('/login');
+      } else {
+        alert(`Lỗi khi lấy danh sách cuộc trò chuyện: ${error.message}`);
+      }
+    }
+  };
+
+  const fetchContacts = async () => {
+    if (!currentUserId) {
+      console.log('⚠️ currentUserId không tồn tại');
+      alert('Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại.');
+      navigate('/login');
+      return;
+    }
+
+    const token = localStorage.getItem('token');
+    try {
+      const response = await axios.get('http://localhost:3000/api/contacts', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setContacts(response.data);
+    } catch (error) {
+      console.error('Lỗi khi lấy danh sách bạn bè:', error);
+      if (error.response?.status === 401) {
+        alert('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        navigate('/login');
+      }
+    }
+  };
+
+  const fetchUserProfile = async () => {
+    if (!currentUserId) {
+      console.log('⚠️ currentUserId không tồn tại');
+      alert('Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại.');
+      navigate('/login');
+      return;
+    }
+
+    const token = localStorage.getItem('token');
+    try {
+      const response = await axios.get('http://localhost:3000/api/auth/profile', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const profileData = {
+        name: response.data.data.name || '',
+        phoneNumber: response.data.data.phoneNumber || '',
+        avatar: response.data.data.avatar || null,
+        coverPhoto: response.data.data.coverPhoto || null,
+        dateOfBirth: response.data.data.dateOfBirth || null,
+        gender: response.data.data.gender || 'Nam',
+      };
+      setUserProfile(profileData);
+      setEditProfile(profileData);
+    } catch (error) {
+      console.error('Lỗi khi lấy thông tin người dùng:', error);
+      if (error.response?.status === 401) {
+        alert('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        navigate('/login');
+      }
+    }
+  };
+
   useEffect(() => {
+    console.log('📌 Current User ID:', currentUserId);
+    if (!currentUserId) {
+      console.log('⚠️ currentUserId không tồn tại');
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      navigate('/login');
+      return;
+    }
+
     const token = localStorage.getItem('token');
     console.log('📌 Token từ localStorage:', token);
     if (!token || token === 'undefined' || !token.startsWith('eyJ')) {
       console.log('⚠️ Token không hợp lệ hoặc thiếu');
       localStorage.removeItem('token');
+      localStorage.removeItem('user');
       navigate('/login');
       return;
     }
 
-    const fetchChats = async () => {
-      try {
-        const response = await axios.get('http://localhost:3000/api/chats', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setChats(response.data);
-      } catch (error) {
-        console.error('Lỗi khi lấy danh sách cuộc trò chuyện:', error);
-        if (error.response?.status === 401) {
-          alert('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
-          localStorage.removeItem('token');
-          navigate('/login');
-        }
-      }
-    };
-
-    const fetchContacts = async () => {
-      try {
-        const response = await axios.get('http://localhost:3000/api/contacts', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setContacts(response.data);
-      } catch (error) {
-        console.error('Lỗi khi lấy danh sách bạn bè:', error);
-        if (error.response?.status === 401) {
-          alert('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
-          localStorage.removeItem('token');
-          navigate('/login');
-        }
-      }
-    };
-
-    const fetchUserProfile = async () => {
-      try {
-        const response = await axios.get('http://localhost:3000/api/auth/profile', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const profileData = {
-          name: response.data.data.name || '',
-          phoneNumber: response.data.data.phoneNumber || '',
-          avatar: response.data.data.avatar || null,
-          coverPhoto: response.data.data.coverPhoto || null,
-          dateOfBirth: response.data.data.dateOfBirth || null,
-          gender: response.data.data.gender || 'Nam',
-        };
-        setUserProfile(profileData);
-        setEditProfile(profileData);
-      } catch (error) {
-        console.error('Lỗi khi lấy thông tin người dùng:', error);
-        if (error.response?.status === 401) {
-          alert('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
-          localStorage.removeItem('token');
-          navigate('/login');
-        }
-      }
-    };
-
-    // Lấy lịch sử tìm kiếm từ localStorage
     const savedSearches = JSON.parse(localStorage.getItem('recentSearches')) || [];
     setRecentSearches(savedSearches);
 
     fetchChats();
     fetchContacts();
     fetchUserProfile();
-  }, [navigate]);
+  }, [navigate, fetchChatsTrigger, currentUserId]);
 
-  // Xử lý tìm kiếm user
   const handleUserSearch = async (query) => {
     setUserSearchQuery(query);
     if (!query) {
@@ -115,7 +186,13 @@ const Sidebar = ({ onSelectChat }) => {
       return;
     }
 
-    // Ràng buộc: Chỉ tìm kiếm khi nhập đủ 10 số
+    if (!currentUserId) {
+      console.log('⚠️ currentUserId không tồn tại');
+      alert('Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại.');
+      navigate('/login');
+      return;
+    }
+
     const phoneRegex = /^\d{10}$/;
     if (!phoneRegex.test(query)) {
       setUserSearchResults([]);
@@ -128,6 +205,7 @@ const Sidebar = ({ onSelectChat }) => {
       console.log('⚠️ Token không hợp lệ khi tìm kiếm');
       alert('Vui lòng đăng nhập để tìm kiếm người dùng.');
       localStorage.removeItem('token');
+      localStorage.removeItem('user');
       navigate('/login');
       return;
     }
@@ -141,12 +219,9 @@ const Sidebar = ({ onSelectChat }) => {
       );
       console.log('📌 Response tìm kiếm:', response.data);
 
-      // Kiểm tra response
       if (response.data && response.data.userId) {
-        // Response là object người dùng trực tiếp
         setUserSearchResults([response.data]);
       } else if (response.data.success && response.data.data) {
-        // Response có định dạng { success: true, data: {...} }
         setUserSearchResults([response.data.data]);
       } else {
         setUserSearchResults([]);
@@ -158,6 +233,7 @@ const Sidebar = ({ onSelectChat }) => {
       if (error.response?.status === 401) {
         alert('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
         localStorage.removeItem('token');
+        localStorage.removeItem('user');
         navigate('/login');
       } else if (error.response?.status === 404) {
         alert('Không tìm thấy người dùng với số điện thoại này.');
@@ -167,86 +243,67 @@ const Sidebar = ({ onSelectChat }) => {
     }
   };
 
-  // Xử lý chọn user để bắt đầu chat
-  const handleSelectUser = async (user) => {
-    const token = localStorage.getItem('token');
-    console.log('📌 Token khi chọn user:', token);
-    if (!token || token === 'undefined' || !token.startsWith('eyJ')) {
-      console.log('⚠️ Token không hợp lệ khi chọn user');
-      alert('Vui lòng đăng nhập để bắt đầu cuộc trò chuyện.');
-      localStorage.removeItem('token');
-      navigate('/login');
-      return;
-    }
-
-    try {
-      // Kiểm tra xem cuộc trò chuyện đã tồn tại chưa
-      const existingChat = chats.find((chat) =>
-        chat.participants?.some((p) => p.id === user.userId)
-      );
-      if (existingChat) {
-        console.log('📌 Mở cuộc trò chuyện hiện có:', existingChat);
-        onSelectChat(existingChat);
-        setUserSearchQuery('');
-        setUserSearchResults([]);
-        setIsSearchActive(false);
-        return;
-      }
-
-      // Tạo cuộc trò chuyện mới
-      console.log('📌 Tạo cuộc trò chuyện mới với user:', user.userId);
-      const response = await axios.post(
-        'http://localhost:3000/api/chats',
-        { participantId: user.userId },
-        { headers: { Authorization: `Bearer ${token.trim()}` } }
-      );
-
-      const newChat = response.data;
-      console.log('📌 Cuộc trò chuyện mới:', newChat);
-      setChats([...chats, newChat]);
-      onSelectChat(newChat);
-
-      // Lưu vào lịch sử tìm kiếm
-      const updatedSearches = [
-        {
-          userId: user.userId,
-          name: user.name,
-          phoneNumber: user.phoneNumber,
-          avatar: user.avatar || null,
-        },
-        ...recentSearches.filter((search) => search.userId !== user.userId),
-      ].slice(0, 5); // Giới hạn 5 tìm kiếm gần đây
-      setRecentSearches(updatedSearches);
-      localStorage.setItem('recentSearches', JSON.stringify(updatedSearches));
-
-      setUserSearchQuery('');
-      setUserSearchResults([]);
-      setIsSearchActive(false);
-    } catch (error) {
-      console.error('Lỗi khi tạo cuộc trò chuyện:', error);
-      if (error.response?.status === 401) {
-        alert('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
-        localStorage.removeItem('token');
-        navigate('/login');
-      } else {
-        alert('Không thể bắt đầu cuộc trò chuyện! Vui lòng thử lại.');
-      }
-    }
-  };
-
-  // Xử lý khi focus vào thanh tìm kiếm
   const handleSearchFocus = () => {
     setIsSearchActive(true);
   };
 
-  // Xử lý đóng form tìm kiếm
   const handleCloseSearch = () => {
     setIsSearchActive(false);
     setUserSearchQuery('');
     setUserSearchResults([]);
   };
 
-  // Xử lý bộ lọc
+  const handleSelectUser = async (user) => {
+    try {
+      if (!currentUserId) {
+        console.log('⚠️ currentUserId không tồn tại');
+        alert('Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại.');
+        navigate('/login');
+        return;
+      }
+
+      const token = localStorage.getItem('token');
+      console.log('📌 Token khi chọn user:', token);
+      if (!token || token === 'undefined' || !token.startsWith('eyJ')) {
+        console.log('⚠️ Token không hợp lệ khi chọn user');
+        alert('Vui lòng đăng nhập để bắt đầu trò chuyện.');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        navigate('/login');
+        return;
+      }
+
+      if (!user.userId) {
+        console.error('⚠️ user.userId không tồn tại:', user);
+        alert('Không thể bắt đầu trò chuyện: Thông tin người dùng không hợp lệ.');
+        return;
+      }
+
+      const chat = {
+        id: user.userId,
+        name: user.name,
+        phoneNumber: user.phoneNumber,
+        avatar: user.avatar,
+        participants: [user.userId],
+        targetUserId: user.userId,
+      };
+
+      setRecentSearches((prev) => {
+        const updated = [
+          { userId: user.userId, name: user.name, phoneNumber: user.phoneNumber, avatar: user.avatar },
+          ...prev.filter((s) => s.userId !== user.userId),
+        ].slice(0, 5);
+        localStorage.setItem('recentSearches', JSON.stringify(updated));
+        return updated;
+      });
+
+      onSelectChat(chat);
+    } catch (error) {
+      console.error('❌ Lỗi khi xử lý người dùng:', error);
+      alert('Có lỗi xảy ra. Vui lòng thử lại.');
+    }
+  };
+
   const filteredChats = chats;
 
   const displayedChats = () => {
@@ -258,21 +315,30 @@ const Sidebar = ({ onSelectChat }) => {
     return filteredChats;
   };
 
-  // Xử lý đăng xuất
   const handleLogout = () => {
     localStorage.removeItem('token');
-    navigate('/login');
+    localStorage.removeItem('user');
+    navigate('/');
   };
 
-  // Xử lý đánh dấu đã đọc
   const handleMarkAsRead = async (chatId) => {
+    if (!currentUserId) {
+      console.log('⚠️ currentUserId không tồn tại');
+      alert('Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại.');
+      navigate('/login');
+      return;
+    }
+
     const token = localStorage.getItem('token');
     console.log('📌 Token khi đánh dấu đã đọc:', token);
     if (!token || token === 'undefined' || !token.startsWith('eyJ')) {
       console.log('⚠️ Token không hợp lệ khi đánh dấu đã đọc');
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
       navigate('/login');
       return;
     }
+
     try {
       await axios.post(
         `http://localhost:3000/api/chats/${chatId}/mark-as-read`,
@@ -289,31 +355,39 @@ const Sidebar = ({ onSelectChat }) => {
       if (error.response?.status === 401) {
         alert('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
         localStorage.removeItem('token');
+        localStorage.removeItem('user');
         navigate('/login');
       }
     }
   };
 
-  // Xử lý thêm bạn
   const handleAddFriend = () => {
     alert('Chức năng thêm bạn đang được phát triển!');
   };
 
-  // Xử lý tạo nhóm
   const handleCreateGroup = () => {
     alert('Chức năng tạo nhóm đang được phát triển!');
   };
 
-  // Xử lý upload avatar
   const handleAvatarUpload = async (event) => {
+    if (!currentUserId) {
+      console.log('⚠️ currentUserId không tồn tại');
+      alert('Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại.');
+      navigate('/login');
+      return;
+    }
+
     const token = localStorage.getItem('token');
     console.log('📌 Token khi upload avatar:', token);
     if (!token || token === 'undefined' || !token.startsWith('eyJ')) {
       console.log('⚠️ Token không hợp lệ khi upload avatar');
       alert('Vui lòng đăng nhập để cập nhật avatar.');
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
       navigate('/login');
       return;
     }
+
     const file = event.target.files[0];
     if (!file) return;
 
@@ -345,6 +419,7 @@ const Sidebar = ({ onSelectChat }) => {
       if (error.response?.status === 401) {
         alert('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
         localStorage.removeItem('token');
+        localStorage.removeItem('user');
         navigate('/login');
       } else {
         alert('Cập nhật avatar thất bại!');
@@ -352,21 +427,30 @@ const Sidebar = ({ onSelectChat }) => {
     }
   };
 
-  // Xử lý chỉnh sửa thông tin
   const handleEditProfile = () => {
     setEditMode(true);
     setChangePasswordMode(false);
   };
 
   const handleSaveProfile = async () => {
+    if (!currentUserId) {
+      console.log('⚠️ currentUserId không tồn tại');
+      alert('Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại.');
+      navigate('/login');
+      return;
+    }
+
     const token = localStorage.getItem('token');
     console.log('📌 Token khi lưu profile:', token);
     if (!token || token === 'undefined' || !token.startsWith('eyJ')) {
       console.log('⚠️ Token không hợp lệ khi lưu profile');
       alert('Vui lòng đăng nhập để cập nhật thông tin.');
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
       navigate('/login');
       return;
     }
+
     const formData = new FormData();
     formData.append('name', editProfile.name);
     formData.append('dateOfBirth', editProfile.dateOfBirth || '');
@@ -396,6 +480,7 @@ const Sidebar = ({ onSelectChat }) => {
       if (error.response?.status === 401) {
         alert('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
         localStorage.removeItem('token');
+        localStorage.removeItem('user');
         navigate('/login');
       } else {
         alert('Cập nhật thông tin thất bại!');
@@ -408,21 +493,30 @@ const Sidebar = ({ onSelectChat }) => {
     setEditMode(false);
   };
 
-  // Xử lý đổi mật khẩu
   const handleChangePassword = () => {
     setChangePasswordMode(true);
     setEditMode(false);
   };
 
   const handleSavePassword = async () => {
+    if (!currentUserId) {
+      console.log('⚠️ currentUserId không tồn tại');
+      alert('Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại.');
+      navigate('/login');
+      return;
+    }
+
     const token = localStorage.getItem('token');
     console.log('📌 Token khi đổi mật khẩu:', token);
     if (!token || token === 'undefined' || !token.startsWith('eyJ')) {
       console.log('⚠️ Token không hợp lệ khi đổi mật khẩu');
       alert('Vui lòng đăng nhập để đổi mật khẩu.');
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
       navigate('/login');
       return;
     }
+
     if (!passwordData.oldPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
       alert('Vui lòng nhập đầy đủ thông tin!');
       return;
@@ -451,6 +545,7 @@ const Sidebar = ({ onSelectChat }) => {
       if (error.response?.status === 401) {
         alert('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
         localStorage.removeItem('token');
+        localStorage.removeItem('user');
         navigate('/login');
       } else {
         alert('Đổi mật khẩu thất bại!');
@@ -465,7 +560,6 @@ const Sidebar = ({ onSelectChat }) => {
 
   return (
     <div className="sidebar">
-      {/* Phần đầu sidebar */}
       <div className="sidebar-header">
         <img
           src={userProfile.avatar || '/assets/images/avatar.png'}
@@ -495,7 +589,6 @@ const Sidebar = ({ onSelectChat }) => {
         </div>
       </div>
 
-      {/* Tab Tin nhắn */}
       {activeTab === 'messages' && (
         <div className="chat-list">
           <div className="chat-list-header">
@@ -522,10 +615,8 @@ const Sidebar = ({ onSelectChat }) => {
             )}
           </div>
 
-          {/* Hiển thị form tìm kiếm hoặc tabs lọc */}
           {isSearchActive ? (
             <div className="search-form">
-              {/* Kết quả tìm kiếm */}
               {userSearchResults.length > 0 && (
                 <div className="user-search-results">
                   <h4>Kết quả tìm kiếm</h4>
@@ -549,7 +640,6 @@ const Sidebar = ({ onSelectChat }) => {
                 </div>
               )}
 
-              {/* Tìm kiếm gần đây */}
               {recentSearches.length > 0 && (
                 <div className="recent-searches">
                   <h4>Tìm kiếm gần đây</h4>
@@ -598,25 +688,43 @@ const Sidebar = ({ onSelectChat }) => {
                   Đánh dấu đã đọc ✅
                 </button>
               </div>
-              {displayedChats().map((chat) => (
-                <div
-                  key={chat.id}
-                  className={`chat-item ${chat.unread ? 'unread' : ''}`}
-                  onClick={() => {
-                    onSelectChat(chat);
-                    handleMarkAsRead(chat.id);
-                  }}
-                >
-                  <p className="chat-name">{chat.name}</p>
-                  <p className="last-message">{chat.lastMessage}</p>
+              {displayedChats().length > 0 ? (
+                displayedChats().map((chat) => (
+                  <div
+                    key={chat.id}
+                    className={`chat-item ${chat.unread ? 'unread' : ''}`}
+                    onClick={() => {
+                      console.log('👆 Chọn cuộc trò chuyện:', chat);
+                      onSelectChat(chat);
+                      handleMarkAsRead(chat.id);
+                    }}
+                  >
+                    <img
+                      src={chat.avatar || '/assets/images/avatar.png'}
+                      alt="Avatar"
+                      className="chat-avatar"
+                    />
+                    <div className="chat-info">
+                      <p className="chat-name">{chat.name || 'Không có tên'}</p>
+                      <p className="last-message">{chat.lastMessage || 'Chưa có tin nhắn'}</p>
+                      <p className="chat-time">
+                        {chat.timestamp ? new Date(chat.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                      </p>
+                    </div>
+                    {chat.unread && <span className="unread-badge">{chat.unreadCount || 1}</span>}
+                  </div>
+                ))
+              ) : (
+                <div className="no-chats">
+                  <p>Chưa có cuộc trò chuyện nào.</p>
+                  <p>Hãy tìm kiếm người dùng để bắt đầu trò chuyện!</p>
                 </div>
-              ))}
+              )}
             </>
           )}
         </div>
       )}
 
-      {/* Tab Danh bạ */}
       {activeTab === 'contacts' && (
         <div className="contacts">
           <h3>Danh sách bạn bè</h3>
@@ -629,7 +737,6 @@ const Sidebar = ({ onSelectChat }) => {
         </div>
       )}
 
-      {/* Tab Cài đặt */}
       {activeTab === 'settings' && (
         <div className="settings">
           <h3>Thông tin cá nhân</h3>

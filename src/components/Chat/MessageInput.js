@@ -6,9 +6,13 @@ const MessageInput = ({ onSendMessage }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    console.log('📤 Form submitted, message:', message);
     if (message.trim()) {
+      console.log('📩 Gọi onSendMessage với:', message);
       onSendMessage(message);
       setMessage('');
+    } else {
+      console.log('⚠️ Tin nhắn rỗng, không gửi');
     }
   };
 
