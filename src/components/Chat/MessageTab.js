@@ -3,6 +3,7 @@ import axios from 'axios';
 import UserSearch from './UserSearch';
 import { useNavigate } from 'react-router-dom';
 import '../../assets/styles/Sidebar.css';
+import { FaSearch } from 'react-icons/fa';
 
 const MessagesTab = ({ onSelectChat }) => {
   const [chats, setChats] = useState([]);
@@ -31,22 +32,54 @@ const MessagesTab = ({ onSelectChat }) => {
         headers: { Authorization: `Bearer ${token.trim()}` },
       });
 
+      console.log('API /api/messages/summary response:', response.data);
+
       if (response.data && response.data.success) {
         const conversations = response.data.data?.conversations || [];
-        const formattedChats = conversations.map((conv) => ({
-          id: conv.otherUserId,
-          name: conv.displayName || 'Không có tên',
-          phoneNumber: conv.phoneNumber || '',
-          avatar: conv.avatar || '/assets/images/avatar.png',
-          lastMessage:
-            conv.lastMessage?.status === 'recalled'
-              ? '(Tin nhắn đã thu hồi)'
-              : conv.lastMessage?.content || 'Chưa có tin nhắn',
-          timestamp: conv.lastMessage?.createdAt || new Date().toISOString(),
-          unread: conv.unreadCount > 0,
-          unreadCount: conv.unreadCount || 0,
-          targetUserId: conv.otherUserId,
-        }));
+
+        // Gọi API phụ để lấy thông tin chi tiết của từng user
+        const formattedChats = await Promise.all(
+          conversations.map(async (conv) => {
+            let avatar = conv.avatar || '/assets/images/avatar.png';
+
+            // Gọi API để lấy thông tin chi tiết của user (bao gồm avatar)
+            try {
+              const userResponse = await axios.get(
+                `http://localhost:3000/api/users/${conv.otherUserId}`,
+                {
+                  headers: { Authorization: `Bearer ${token.trim()}` },
+                }
+              );
+              if (userResponse.data && userResponse.data.success) {
+                avatar = userResponse.data.data.avatar || '/assets/images/avatar.png';
+              }
+            } catch (error) {
+              console.error(`Error fetching user ${conv.otherUserId}:`, error);
+              if (error.response?.status === 401) {
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                navigate('/login');
+                return;
+              }
+            }
+
+            return {
+              id: conv.otherUserId,
+              name: conv.displayName || 'Không có tên',
+              phoneNumber: conv.phoneNumber || '',
+              avatar: avatar,
+              lastMessage:
+                conv.lastMessage?.status === 'recalled'
+                  ? '(Tin nhắn đã thu hồi)'
+                  : conv.lastMessage?.content || 'Chưa có tin nhắn',
+              timestamp: conv.lastMessage?.timestamp || new Date().toISOString(),
+              unread: conv.unreadCount > 0,
+              unreadCount: conv.unreadCount || 0,
+              targetUserId: conv.otherUserId,
+            };
+          })
+        );
+
         setChats(formattedChats);
       }
     } catch (error) {
@@ -154,13 +187,16 @@ const MessagesTab = ({ onSelectChat }) => {
   return (
     <div className="chat-list">
       <div className="chat-list-header">
-        <input
-          type="text"
-          placeholder="Tìm kiếm"
-          value={userSearchQuery}
-          onChange={(e) => handleUserSearch(e.target.value)}
-          onFocus={() => setIsSearchActive(true)}
-        />
+        <div className="search-container">
+          <FaSearch className="search-icon" />
+          <input
+            type="text"
+            placeholder="Tìm kiếm"
+            value={userSearchQuery}
+            onChange={(e) => handleUserSearch(e.target.value)}
+            onFocus={() => setIsSearchActive(true)}
+          />
+        </div>
         {isSearchActive && (
           <button className="action-btn close-btn" onClick={handleCloseSearch}>
             Đóng

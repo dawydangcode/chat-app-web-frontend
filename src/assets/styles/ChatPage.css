@@ -56,8 +56,8 @@ body {
 }
 
 .avatar {
-  width: 40px;
-  height: 40px;
+  width: 50px;
+  height: 50px;
   border-radius: 50%;
   margin-bottom: 20px;
   cursor: pointer;
@@ -67,6 +67,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  height: 100%; /* Đảm bảo chiều cao chiếm toàn bộ Sidebar */
 }
 
 .sidebar-actions button {
@@ -79,8 +80,13 @@ body {
 }
 
 .sidebar-actions button.active {
-  background-color: #153f7d;
+  background-color: #16396e;
   border-radius: 5px;
+}
+
+.sidebar-actions button:last-child {
+  padding-bottom: 30px;
+  margin-top: auto; /* Đẩy nút cuối cùng xuống dưới cùng */
 }
 
 /* MessagesTab (div2) */
@@ -102,9 +108,33 @@ body {
 .chat-list-header input {
   flex: 1;
   padding: 8px;
-  border: 1px solid #ddd;
-  border-radius: 20px;
+  border: unset;
+  border-radius: 10px;
   font-size: 0.9rem;
+  background-color: #ebecf0;
+}
+
+.chat-list-header input:focus {
+  outline: none; /* Loại bỏ outline mặc định của trình duyệt */
+  border: unset; /* Giữ viền giống như trạng thái bình thường */
+  /* Nếu bạn muốn loại bỏ hoàn toàn viền khi focus, có thể dùng: */
+  /* border: none; */
+}
+
+.search-container {
+  display: flex; /* Đặt flex để icon và input nằm cạnh nhau */
+  align-items: center; /* Căn giữa theo chiều dọc */
+  flex: 1;
+  gap: 8px; /* Khoảng cách giữa icon và input */
+  background-color: #ebecf0;
+  border-radius: 5px; /* Bo tròn góc cho container */
+  
+}
+
+.search-icon {
+  color: #666;
+  font-size: 1rem;
+  margin-left: 10px; /* Khoảng cách bên trái */
 }
 
 .action-btn {
@@ -117,7 +147,16 @@ body {
 }
 
 .close-btn {
-  background-color: #e63946;
+  color: black;
+  background-color: #ffffff;
+  transition: background-color 0.1s ease;
+  border-radius: 5px;
+  width: 90px;
+  font-weight: 500;
+}
+
+.close-btn:hover {
+  background-color: #e5e7eb; /* đổi màu theo ý bạn */
 }
 
 .chat-item {

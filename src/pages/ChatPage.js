@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import SidebarHeader from '../components/Chat/SidebarHeader';
 import MessagesTab from '../components/Chat/MessageTab';
 import ChatWindow from '../components/Chat/ChatWindow';
@@ -10,11 +11,57 @@ import '../assets/styles/ChatPage.css';
 const ChatPage = () => {
   const [activeTab, setActiveTab] = useState('messages');
   const [selectedChat, setSelectedChat] = useState(null);
-  const [userProfile, setUserProfile] = useState({
-    name: 'User Name',
-    avatar: '/assets/images/avatar.png',
-  });
   const [isInfoVisible, setIsInfoVisible] = useState(true);
+  const [userProfile, setUserProfile] = useState({
+    name: '',
+    avatar: null,
+  });
+
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const currentUserId = currentUser?.userId;
+
+  // Lấy thông tin user từ API giống như trong SettingsTab
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      if (!currentUserId) {
+        window.location.href = '/login';
+        return;
+      }
+
+      const token = localStorage.getItem('token');
+      if (!token || !token.startsWith('eyJ')) {
+        window.location.href = '/login';
+        return;
+      }
+
+      try {
+        const response = await axios.get('http://localhost:3000/api/auth/profile', {
+          headers: { Authorization: `Bearer ${token.trim()}` },
+        });
+        const profileData = {
+          name: response.data.data.name || 'User Name',
+          avatar: response.data.data.avatar || '/assets/images/avatar.png',
+        };
+        setUserProfile(profileData);
+
+        // Cập nhật localStorage để đồng bộ dữ liệu
+        const updatedUser = {
+          ...currentUser,
+          name: response.data.data.name,
+          avatar: response.data.data.avatar,
+        };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+      } catch (error) {
+        if (error.response?.status === 401) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          window.location.href = '/login';
+        }
+      }
+    };
+
+    fetchUserProfile();
+  }, [currentUserId]);
 
   const handleSelectChat = (chat) => {
     setSelectedChat(chat);
