@@ -1,31 +1,58 @@
 import React from 'react';
-import '../../assets/styles/MessageList.css';
+import '../../assets/styles/ChatWindow.css';
 
-const MessageList = ({ messages }) => {
-  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-  const currentUserId = currentUser?.userId;
-
-  console.log('Messages in MessageList:', messages);
-  console.log('Current User ID:', currentUserId);
-
-  if (!currentUserId) {
-    console.log('⚠️ currentUserId không tồn tại');
-    return <div className="message-list"><p>Lỗi: Không xác định được người dùng. Vui lòng đăng nhập lại.</p></div>;
-  }
-
-  if (!messages || messages.length === 0) {
-    return <div className="message-list"><p>Chưa có tin nhắn nào</p></div>;
-  }
+const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, onForwardMessage }) => {
+  const currentUserId = JSON.parse(localStorage.getItem('user') || '{}')?.userId;
 
   return (
     <div className="message-list">
-      {messages.map((msg) => (
+      {messages.map((message) => (
         <div
-          key={msg.messageId || msg.id}
-          className={`message ${msg.senderId === currentUserId ? 'sent' : 'received'}`}
+          key={message.id || message.messageId}
+          className={`message ${
+            message.senderId === currentUserId ? 'message-right' : 'message-left'
+          }`}
         >
-          <p>{msg.content}</p>
-          <span>{new Date(msg.timestamp).toLocaleTimeString()}</span>
+          <div className="message-content">
+            {message.status === 'recalled' ? (
+              <p>(Tin nhắn đã thu hồi)</p>
+            ) : (
+              <>
+                {message.type === 'text' && <p>{message.content}</p>}
+                {message.type === 'file' && (
+                  <a href={message.mediaUrl} target="_blank" rel="noopener noreferrer">
+                    {message.fileName || 'File'}
+                  </a>
+                )}
+                <span className="message-time">
+                  {new Date(message.timestamp).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </span>
+              </>
+            )}
+            {message.senderId === currentUserId && message.status !== 'recalled' && (
+              <div className="message-actions">
+                <button onClick={() => onRecallMessage(message.id || message.messageId)}>
+                  Thu hồi
+                </button>
+                <button onClick={() => onDeleteMessage(message.id || message.messageId)}>
+                  Xóa
+                </button>
+                <button
+                  onClick={() => {
+                    const targetUserId = prompt('Nhập ID người nhận để chuyển tiếp:');
+                    if (targetUserId) {
+                      onForwardMessage(message.id || message.messageId, targetUserId);
+                    }
+                  }}
+                >
+                  Chuyển tiếp
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       ))}
     </div>

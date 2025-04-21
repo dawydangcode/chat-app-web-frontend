@@ -5,210 +5,197 @@ import MessageInput from './MessageInput';
 import '../../assets/styles/ChatWindow.css';
 import { useNavigate } from 'react-router-dom';
 
-const ChatWindow = ({ chat, onChatCreated }) => {
+const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
   const [messages, setMessages] = useState([]);
+  const [recentChats, setRecentChats] = useState([]);
   const navigate = useNavigate();
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const currentUserId = currentUser?.userId;
 
   useEffect(() => {
     const fetchMessages = async () => {
-      console.log('🔍 Chat object:', chat);
-
-      if (!currentUserId) {
-        console.log('⚠️ currentUserId không tồn tại');
-        alert('Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại.');
+      if (!currentUserId || !chat?.targetUserId) {
         navigate('/login');
         return;
       }
 
-      if (!chat?.targetUserId) {
-        console.log('⚠️ targetUserId không tồn tại');
-        setMessages([]);
-        return;
-      }
-
       const token = localStorage.getItem('token');
-      console.log('📌 Token:', token);
-      if (!token || token === 'undefined' || !token.startsWith('eyJ')) {
-        console.log('⚠️ Token không hợp lệ');
-        alert('Vui lòng đăng nhập lại.');
+      if (!token || !token.startsWith('eyJ')) {
         navigate('/login');
         return;
       }
 
       try {
-        console.log('🌐 Gửi API request tới /api/messages/user/:userId');
         const response = await axios.get(
           `http://localhost:3000/api/messages/user/${chat.targetUserId}`,
           { headers: { Authorization: `Bearer ${token.trim()}` } }
         );
-        console.log('📥 API response:', response.data);
         if (response.data.success) {
           setMessages(response.data.messages || []);
-        } else {
-          throw new Error(response.data.message || 'Lấy tin nhắn thất bại');
         }
       } catch (error) {
-        console.error('❌ Lỗi khi lấy tin nhắn:', error);
         if (error.response?.status === 401) {
-          alert('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
           localStorage.removeItem('token');
           localStorage.removeItem('user');
           navigate('/login');
-        } else {
-          alert(`Lấy tin nhắn thất bại: ${error.message}`);
         }
         setMessages([]);
       }
     };
 
+    const fetchRecentChats = async () => {
+      const token = localStorage.getItem('token');
+      if (!token || !token.startsWith('eyJ')) {
+        return;
+      }
+
+      try {
+        const response = await axios.get('http://localhost:3000/api/messages/summary', {
+          headers: { Authorization: `Bearer ${token.trim()}` },
+        });
+        if (response.data.success) {
+          const conversations = response.data.data?.conversations || [];
+          const formattedChats = conversations.map((conv) => ({
+            id: conv.otherUserId,
+            name: conv.displayName || 'Không có tên',
+          }));
+          setRecentChats(formattedChats);
+        }
+      } catch (error) {
+        setRecentChats([]);
+      }
+    };
+
     fetchMessages();
+    fetchRecentChats();
   }, [chat, navigate, currentUserId]);
 
-  const handleSendMessage = async (content) => {
-    console.log('📩 handleSendMessage gọi với:', content);
-    console.log('🔍 currentUserId:', currentUserId);
-    console.log('🔍 chat.targetUserId:', chat.targetUserId);
-
-    if (!currentUserId) {
-      console.log('⚠️ currentUserId không tồn tại');
-      alert('Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại.');
+  const handleSendMessage = async (data) => {
+    if (!currentUserId || !chat?.targetUserId) {
       navigate('/login');
-      return;
-    }
-
-    if (!chat?.targetUserId) {
-      console.log('⚠️ chat.targetUserId không tồn tại');
-      alert('Không thể gửi tin nhắn: Người nhận không hợp lệ.');
-      return;
-    }
-
-    if (chat.targetUserId === currentUserId) {
-      console.log('⚠️ Không thể gửi tin nhắn cho chính mình');
-      alert('Bạn không thể gửi tin nhắn cho chính mình!');
       return;
     }
 
     const token = localStorage.getItem('token');
-    console.log('🔐 Token:', token);
-
-    if (!token || token === 'undefined' || !token.startsWith('eyJ')) {
-      console.log('⚠️ Token không hợp lệ khi gửi tin nhắn');
-      alert('Vui lòng đăng nhập để gửi tin nhắn.');
+    if (!token || !token.startsWith('eyJ')) {
       navigate('/login');
       return;
     }
 
-    const newMessage = {
-      id: Date.now(),
-      senderId: currentUserId,
-      content,
-      type: 'text',
-      timestamp: new Date().toISOString(),
-      status: 'pending',
-    };
+    let newMessage;
+    let config = { headers: { Authorization: `Bearer ${token.trim()}` } };
 
-    console.log('📤 Cập nhật messages:', newMessage);
-    setMessages((prevMessages) => [...prevMessages, newMessage]);
-
-    try {
-      console.log('🌐 Gửi API request tới /api/messages/send');
-      const payload = {
+    if (data instanceof FormData) {
+      newMessage = {
+        id: Date.now(),
+        senderId: currentUserId,
+        content: 'Đang tải file...',
+        type: data.get('type'),
+        fileName: data.get('fileName'),
+        mimeType: data.get('mimeType'),
+        timestamp: new Date().toISOString(),
+        status: 'pending',
+      };
+      data.append('receiverId', chat.targetUserId);
+      data.append('metadata', JSON.stringify({ systemMessage: false }));
+    } else {
+      newMessage = {
+        id: Date.now(),
+        senderId: currentUserId,
+        content: data.content,
+        type: data.type,
+        timestamp: new Date().toISOString(),
+        status: 'pending',
+      };
+      data = {
         receiverId: chat.targetUserId,
-        type: 'text',
-        content,
+        type: data.type,
+        content: data.content,
         metadata: JSON.stringify({ systemMessage: false }),
       };
-      console.log('📤 Payload:', payload);
+      config.headers['Content-Type'] = 'application/json';
+    }
+
+    setMessages((prev) => [...prev, newMessage]);
+
+    try {
       const response = await axios.post(
         'http://localhost:3000/api/messages/send',
-        payload,
-        { headers: { Authorization: `Bearer ${token.trim()}` } }
+        data,
+        config
       );
-
-      console.log('📥 API response:', response.data);
-
       if (response.data.success) {
-        console.log('✅ Tin nhắn đã gửi:', response.data.data);
-        setMessages((prevMessages) =>
-          prevMessages.map((msg) =>
+        setMessages((prev) =>
+          prev.map((msg) =>
             msg.id === newMessage.id
               ? {
                   ...msg,
                   id: response.data.data.messageId,
-                  senderId: response.data.data.senderId,
+                  content: response.data.data.content || msg.content,
+                  mediaUrl: response.data.data.mediaUrl,
                   status: response.data.data.status,
                 }
               : msg
           )
         );
-      } else {
-        if (
-          response.data.message.includes(
-            'Failed to update message status: The provided key element does not match the schema'
-          )
-        ) {
-          console.log('⚠️ Bỏ qua lỗi updateMessageStatus, tin nhắn đã lưu');
-          setMessages((prevMessages) =>
-            prevMessages.map((msg) =>
-              msg.id === newMessage.id ? { ...msg, status: 'sent' } : msg
-            )
-          );
-        } else {
-          throw new Error(response.data.message || 'Gửi tin nhắn thất bại');
-        }
-      }
-
-      if (onChatCreated) {
-        console.log('📣 Gọi onChatCreated để cập nhật chats');
-        await onChatCreated();
       }
     } catch (error) {
-      console.error('❌ Lỗi khi gửi tin nhắn:', error);
-      if (error.response?.status === 403) {
-        setMessages((prevMessages) =>
-          prevMessages.map((msg) =>
-            msg.id === newMessage.id ? { ...msg, status: 'restriced' } : msg
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === newMessage.id ? { ...msg, status: 'error' } : msg
+        )
+      );
+    }
+  };
+
+  const handleRecallMessage = async (messageId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.patch(
+        `http://localhost:3000/api/messages/recall/${messageId}`,
+        {},
+        { headers: { Authorization: `Bearer ${token.trim()}` } }
+      );
+      if (response.data.success) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === messageId || msg.messageId === messageId
+              ? { ...msg, status: 'recalled' }
+              : msg
           )
         );
-        alert('Không thể gửi tin nhắn do hạn chế tin nhắn từ người lạ.');
-        if (onChatCreated) {
-          await onChatCreated();
-        }
-      } else if (error.response?.status === 401) {
-        alert('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        navigate('/login');
-      } else {
-        if (
-          error.response?.data?.message?.includes(
-            'Failed to update message status: The provided key element does not match the schema'
-          )
-        ) {
-          console.log('⚠️ Bỏ qua lỗi updateMessageStatus, tin nhắn đã lưu');
-          setMessages((prevMessages) =>
-            prevMessages.map((msg) =>
-              msg.id === newMessage.id ? { ...msg, status: 'sent' } : msg
-            )
-          );
-          if (onChatCreated) {
-            console.log('📣 Gọi onChatCreated để cập nhật chats');
-            await onChatCreated();
-          }
-        } else {
-          setMessages((prevMessages) =>
-            prevMessages.map((msg) =>
-              msg.id === newMessage.id ? { ...msg, status: 'error' } : msg
-            )
-          );
-          alert(`Gửi tin nhắn thất bại: ${error.message}`);
-          if (onChatCreated) {
-            await onChatCreated();
-          }
-        }
       }
+    } catch (error) {}
+  };
+
+  const handleDeleteMessage = async (messageId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.delete(
+        `http://localhost:3000/api/messages/${messageId}`,
+        { headers: { Authorization: `Bearer ${token.trim()}` } }
+      );
+      if (response.data.success) {
+        setMessages((prev) =>
+          prev.filter((msg) => msg.id !== messageId && msg.messageId !== messageId)
+        );
+      }
+    } catch (error) {}
+  };
+
+  const handleForwardMessage = async (messageId, targetUserId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post(
+        `http://localhost:3000/api/messages/forward`,
+        { messageId, targetReceiverId: targetUserId },
+        { headers: { Authorization: `Bearer ${token.trim()}` } }
+      );
+      if (response.data.success) {
+        return true;
+      }
+    } catch (error) {
+      return false;
     }
   };
 
@@ -216,7 +203,7 @@ const ChatWindow = ({ chat, onChatCreated }) => {
     <div className="chat-window">
       <div className="chat-header">
         <img
-          src={chat?.avatar || '/assets/images/avatar.png'}
+          src={chat?.avatar || '/assets/images/placeholder.png'}
           alt="Avatar"
           className="chat-avatar"
         />
@@ -224,8 +211,17 @@ const ChatWindow = ({ chat, onChatCreated }) => {
           <h3>{chat?.name || 'Không có tên'}</h3>
           <p>{chat?.phoneNumber ? `+${chat.phoneNumber}` : 'Chưa có số điện thoại'}</p>
         </div>
+        <button className="toggle-info-btn" onClick={toggleInfo}>
+          {isInfoVisible ? 'Ẩn thông tin' : 'Hiện thông tin'}
+        </button>
       </div>
-      <MessageList messages={messages} />
+      <MessageList
+        messages={messages}
+        recentChats={recentChats}
+        onRecallMessage={handleRecallMessage}
+        onDeleteMessage={handleDeleteMessage}
+        onForwardMessage={handleForwardMessage}
+      />
       <MessageInput onSendMessage={handleSendMessage} />
     </div>
   );

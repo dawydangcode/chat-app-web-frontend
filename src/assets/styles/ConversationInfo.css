@@ -1,0 +1,36 @@
+.conversation-info {
+    padding: 20px;
+    background-color: #fff;
+    border-left: 1px solid #ddd;
+    height: 100%;
+    overflow-y: auto;
+  }
+  
+  .info-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+  
+  .info-avatar {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    margin-bottom: 10px;
+  }
+  
+  .info-section {
+    margin-bottom: 20px;
+  }
+  
+  .info-section h4 {
+    margin: 0 0 10px;
+    font-size: 1rem;
+  }
+  
+  .info-section p {
+    margin: 5px 0;
+    color: #666;
+    font-size: 0.9rem;
+  }

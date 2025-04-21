@@ -51,7 +51,7 @@ const HomePage = () => {
     <div className="home-page">
       <div className="home-header">
       <img src={logo} alt="Zalo Logo" className="logo" />
-        <h1>Chào mừng đến với Zalo</h1>
+        <h1>Chào mừng đến với Zalu</h1>
       </div>
       <div className="form-container">
         {currentForm === 'login' && (
