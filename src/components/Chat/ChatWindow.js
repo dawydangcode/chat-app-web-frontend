@@ -50,7 +50,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       }
 
       try {
-        const response = await axios.get('http://localhost:3000/api/messages/summary', {
+        const response = await axios.get('http://localhost:3000/api/conversations/summary', {
           headers: { Authorization: `Bearer ${token.trim()}` },
         });
         if (response.data.success) {
@@ -133,7 +133,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
                   id: response.data.data.messageId,
                   content: response.data.data.content || msg.content,
                   mediaUrl: response.data.data.mediaUrl,
-                  status: response.data.data.status,
+                  status: response.data.data.status || 'sent', // Đảm bảo status được cập nhật
                 }
               : msg
           )

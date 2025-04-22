@@ -168,9 +168,45 @@
 
 /* ContactsTab */
 .contacts {
-  padding: 20px;
+  padding: 0;
   height: 100%;
   overflow-y: auto;
+}
+
+.contacts-header {
+  display: flex;
+  flex-direction: column; /* Sắp xếp các nút theo cột (dọc) */
+  background-color: #fff;
+  border-bottom: 1px solid #ddd;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.contact-tab-btn {
+  padding: 12px; /* Tăng padding để nút trông rộng rãi hơn */
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: #333;
+  text-align: left; /* Căn trái để giống hình */
+  border-bottom: 1px solid #ddd; /* Thêm viền dưới cho mỗi nút */
+  transition: background-color 0.1s ease;
+}
+
+.contact-tab-btn:last-child {
+  border-bottom: none; /* Xóa viền dưới cho nút cuối cùng */
+}
+
+.contact-tab-btn.active {
+  background-color: #e0f7fa; /* Màu nền khi nút được chọn */
+  font-weight: bold;
+  color: #005AE0;
+}
+
+.contact-tab-btn:hover {
+  background-color: #f0f0f0;
 }
 
 .contact-item {

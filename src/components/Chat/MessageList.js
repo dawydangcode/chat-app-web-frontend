@@ -24,12 +24,23 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                     {message.fileName || 'File'}
                   </a>
                 )}
-                <span className="message-time">
-                  {new Date(message.timestamp).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </span>
+                <div className="message-meta">
+                  <span className="message-time">
+                    {new Date(message.timestamp).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                  {message.senderId === currentUserId && (
+                    <span className={`message-status ${message.status}`}>
+                      {message.status === 'pending' && 'Đang gửi...'}
+                      {message.status === 'sent' && '✓'}
+                      {message.status === 'delivered' && '✓✓'}
+                      {message.status === 'seen' && 'Đã xem'}
+                      {message.status === 'error' && 'Lỗi'}
+                    </span>
+                  )}
+                </div>
               </>
             )}
             {message.senderId === currentUserId && message.status !== 'recalled' && (
