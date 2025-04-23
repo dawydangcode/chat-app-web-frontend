@@ -1,47 +1,58 @@
 // src/utils/socket.js
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = 'http://localhost:3000'; // URL của server
-let socket = null;
+const SOCKET_URL = 'http://localhost:3000';
+let sockets = {};
 
-export const initializeSocket = (token) => {
-  if (socket) {
-    return socket;
+export const initializeSocket = (token, namespace = '') => {
+  const key = namespace || 'default';
+  if (sockets[key]) {
+    return sockets[key];
   }
 
-  socket = io(SOCKET_URL, {
+  sockets[key] = io(`${SOCKET_URL}${namespace}`, {
     auth: {
       token: `Bearer ${token}`,
     },
     transports: ['websocket'],
   });
 
-  socket.on('connect', () => {
-    console.log('Connected to Socket.IO server');
+  sockets[key].on('connect', () => {
+    console.log(`Connected to Socket.IO server (${namespace})`);
   });
 
-  socket.on('connect_error', (error) => {
-    console.error('Socket connection error:', error);
+  sockets[key].on('connect_error', (error) => {
+    console.error(`Socket connection error (${namespace}):`, error);
   });
 
-  socket.on('disconnect', () => {
-    console.log('Disconnected from Socket.IO server');
+  sockets[key].on('disconnect', () => {
+    console.log(`Disconnected from Socket.IO server (${namespace})`);
   });
 
-  return socket;
+  return sockets[key];
 };
 
-export const getSocket = () => {
-  if (!socket) {
-    throw new Error('Socket not initialized. Call initializeSocket first.');
+export const getSocket = (namespace = '') => {
+  const key = namespace || 'default';
+  if (!sockets[key]) {
+    throw new Error(`Socket for namespace ${namespace} not initialized.`);
   }
-  return socket;
+  return sockets[key];
 };
 
-export const disconnectSocket = () => {
-  if (socket) {
-    socket.disconnect();
-    socket = null;
-    console.log('Socket disconnected');
+export const disconnectSocket = (namespace = '') => {
+  const key = namespace || 'default';
+  if (sockets[key]) {
+    sockets[key].disconnect();
+    delete sockets[key];
+    console.log(`Socket disconnected (${namespace})`);
   }
+};
+
+export const disconnectAllSockets = () => {
+  Object.keys(sockets).forEach((key) => {
+    sockets[key].disconnect();
+    delete sockets[key];
+  });
+  console.log('All sockets disconnected');
 };

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { login } from '../../services/auth';
+import { initializeSocket } from '../../utils/socket';
 import '../../assets/styles/Login.css';
 
 const LoginForm = ({ onSwitchToRegister, onSwitchToForgotPassword, onLoginSuccess }) => {
@@ -32,12 +33,9 @@ const LoginForm = ({ onSwitchToRegister, onSwitchToForgotPassword, onLoginSucces
     try {
       const response = await login(phoneNumber, password);
       if (response.success) {
-        // Lưu token vào localStorage
         localStorage.setItem('token', response.token);
-
-        // Lưu thông tin người dùng vào localStorage
         const userData = {
-          userId: response.user.id, // Lưu userId
+          userId: response.user.id,
           name: response.user.name || '',
           phoneNumber: response.user.phoneNumber || '',
         };
@@ -45,7 +43,10 @@ const LoginForm = ({ onSwitchToRegister, onSwitchToForgotPassword, onLoginSucces
 
         console.log('✅ Đã lưu user vào localStorage:', userData);
 
-        // Gọi callback đăng nhập thành công
+        // Initialize Socket.IO for /chat namespace
+        initializeSocket(response.token, '/chat');
+        console.log('Socket initialized for /chat namespace');
+
         onLoginSuccess();
       }
     } catch (err) {

@@ -7,6 +7,7 @@ import '../../assets/styles/ChatWindow.css';
 import { useNavigate } from 'react-router-dom';
 import { VscLayoutSidebarRightOff } from 'react-icons/vsc';
 import { AiOutlineUsergroupAdd } from 'react-icons/ai';
+import { getSocket } from '../../utils/socket';
 
 const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
   const [messages, setMessages] = useState([]);
@@ -16,43 +17,15 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
   const navigate = useNavigate();
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const currentUserId = currentUser?.userId;
-
-  const fetchFriendStatus = async () => {
-    if (!currentUserId || !chat?.targetUserId) return;
-
-    const token = localStorage.getItem('token');
-    if (!token || !token.startsWith('eyJ')) return;
-
-    try {
-      const response = await axios.get(
-        `http://localhost:3000/api/friends/status/${chat.targetUserId}`,
-        { headers: { Authorization: `Bearer ${token.trim()}` } }
-      );
-
-      if (response.data && response.data.status) {
-        setFriendStatus(response.data.status);
-      } else {
-        setFriendStatus('stranger');
-      }
-    } catch (error) {
-      console.error('Error fetching friend status:', error);
-      setFriendStatus('stranger');
-    }
-  };
+  const token = localStorage.getItem('token');
 
   useEffect(() => {
+    if (!currentUserId || !token || !chat?.targetUserId) {
+      navigate('/login');
+      return;
+    }
+
     const fetchMessages = async () => {
-      if (!currentUserId || !chat?.targetUserId) {
-        navigate('/login');
-        return;
-      }
-
-      const token = localStorage.getItem('token');
-      if (!token || !token.startsWith('eyJ')) {
-        navigate('/login');
-        return;
-      }
-
       try {
         const endpoint = chat.isGroup
           ? `http://localhost:3000/api/groups/messages/${chat.targetUserId}`
@@ -61,8 +34,6 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         const response = await axios.get(endpoint, {
           headers: { Authorization: `Bearer ${token.trim()}` },
         });
-
-        console.log('Fetched messages response:', response.data);
 
         if (response.data.success) {
           const fetchedMessages = chat.isGroup ? response.data.data.messages || [] : response.data.messages || [];
@@ -82,11 +53,6 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
     };
 
     const fetchRecentChats = async () => {
-      const token = localStorage.getItem('token');
-      if (!token || !token.startsWith('eyJ')) {
-        return;
-      }
-
       try {
         const response = await axios.get('http://localhost:3000/api/conversations/summary', {
           headers: { Authorization: `Bearer ${token.trim()}` },
@@ -104,231 +70,322 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       }
     };
 
+    const fetchFriendStatus = async () => {
+      if (chat.isGroup) return;
+
+      try {
+        const response = await axios.get(
+          `http://localhost:3000/api/friends/status/${chat.targetUserId}`,
+          { headers: { Authorization: `Bearer ${token.trim()}` } }
+        );
+
+        if (response.data && response.data.status) {
+          setFriendStatus(response.data.status);
+        } else {
+          setFriendStatus('stranger');
+        }
+      } catch (error) {
+        console.error('Error fetching friend status:', error);
+        setFriendStatus('stranger');
+      }
+    };
+
     fetchMessages();
     fetchRecentChats();
-
     if (!chat?.isGroup) {
       fetchFriendStatus();
     } else {
       setFriendStatus(null);
     }
-  }, [chat, navigate, currentUserId]);
+
+    let socket;
+    try {
+      socket = getSocket('/chat');
+    } catch (error) {
+      console.error('Socket not initialized:', error.message);
+      navigate('/login');
+      return;
+    }
+
+    socket.emit('joinRoom', { room: chat.isGroup ? `group:${chat.targetUserId}` : `user:${chat.targetUserId}` });
+
+    socket.on('receiveMessage', (newMessage) => {
+      if (
+        (chat.isGroup && newMessage.groupId === chat.targetUserId) ||
+        (!chat.isGroup && (newMessage.senderId === chat.targetUserId || newMessage.receiverId === chat.targetUserId))
+      ) {
+        setMessages((prev) => {
+          if (!Array.isArray(prev)) return [newMessage];
+          // Kiểm tra xem tin nhắn đã tồn tại chưa (dựa trên messageId)
+          const existingMessageIndex = prev.findIndex(
+            (msg) => msg.id === newMessage.messageId || msg.messageId === newMessage.messageId
+          );
+          if (existingMessageIndex !== -1) {
+            // Cập nhật tin nhắn hiện có
+            return prev.map((msg, index) =>
+              index === existingMessageIndex ? { ...newMessage, id: newMessage.messageId } : msg
+            );
+          }
+          // Thêm tin nhắn mới nếu chưa tồn tại
+          return [...prev, newMessage];
+        });
+      }
+    });
+
+    socket.on('messageStatus', ({ messageId, status }) => {
+      setMessages((prev) => {
+        if (!Array.isArray(prev)) return prev;
+        return prev.map((msg) =>
+          (msg.id === messageId || msg.messageId === messageId) ? { ...msg, status } : msg
+        );
+      });
+    });
+
+    socket.on('messageRecalled', ({ messageId }) => {
+      setMessages((prev) => {
+        if (!Array.isArray(prev)) return prev;
+        return prev.map((msg) =>
+          (msg.id === messageId || msg.messageId === messageId) ? { ...msg, status: 'recalled' } : msg
+        );
+      });
+    });
+
+    socket.on('messageDeleted', ({ messageId }) => {
+      setMessages((prev) => {
+        if (!Array.isArray(prev)) return prev;
+        return prev.filter((msg) => msg.id !== messageId && msg.messageId !== messageId);
+      });
+    });
+
+    socket.on('user:status', ({ userId, status }) => {
+      if (userId === chat.targetUserId) {
+        console.log(`User ${userId} is now ${status}`);
+      }
+    });
+
+    return () => {
+      socket.off('receiveMessage');
+      socket.off('messageStatus');
+      socket.off('messageRecalled');
+      socket.off('messageDeleted');
+      socket.off('user:status');
+    };
+  }, [chat, currentUserId, token, navigate]);
 
   const handleSendMessage = async (data, onComplete) => {
-    if (!currentUserId || !chat?.targetUserId) {
+    if (!currentUserId || !chat?.targetUserId || !token) {
       navigate('/login');
       onComplete?.();
       return;
     }
-
-    const token = localStorage.getItem('token');
-    if (!token || !token.startsWith('eyJ')) {
+  
+    let socket;
+    try {
+      socket = getSocket('/chat');
+      console.log('Socket retrieved for /chat namespace:', socket.id);
+    } catch (error) {
+      console.error('Socket not initialized:', error.message);
       navigate('/login');
       onComplete?.();
       return;
     }
-
+  
     let newMessage;
-    let config = { headers: { Authorization: `Bearer ${token.trim()}` } };
-
+  
     if (data instanceof FormData) {
-      const messageType = data.get('type') || 'file';
       newMessage = {
-        id: Date.now() + Math.random(),
+        id: Date.now() + Math.random(), // ID tạm thời
         senderId: currentUserId,
         content: 'Đang tải file...',
-        type: messageType,
+        type: data.get('type') || 'file',
         fileName: data.get('fileName'),
         mimeType: data.get('mimeType'),
         timestamp: new Date().toISOString(),
         status: 'pending',
       };
-
-      const formDataEntries = {};
-      for (let [key, value] of data.entries()) {
-        formDataEntries[key] = value;
-      }
-      console.log('Sending FormData:', formDataEntries);
-
-      if (chat.isGroup) {
-        data.append('metadata', JSON.stringify({ systemMessage: false }));
-      } else {
-        data.append('receiverId', chat.targetUserId);
-        data.append('content', 'File attachment');
-        data.append('metadata', JSON.stringify({ systemMessage: false }));
+  
+      setMessages((prev) => {
+        if (!Array.isArray(prev)) return [newMessage];
+        return [...prev, newMessage];
+      });
+  
+      try {
+        const file = data.get('file');
+        const messageData = {
+          receiverId: chat.isGroup ? null : chat.targetUserId,
+          groupId: chat.isGroup ? chat.targetUserId : null,
+          type: newMessage.type,
+          content: 'File attachment',
+          file: {
+            data: await file.arrayBuffer(),
+            name: newMessage.fileName,
+            mimeType: newMessage.mimeType,
+          },
+        };
+  
+        console.log('Emitting sendMessage with data:', messageData);
+  
+        socket.emit('sendMessage', messageData, (response) => {
+          console.log('Received sendMessage response:', response);
+          if (response.success) {
+            setMessages((prev) => {
+              if (!Array.isArray(prev)) return [response.data];
+              return prev.map((msg) =>
+                msg.id === newMessage.id
+                  ? { ...response.data, id: response.data.messageId } // Cập nhật tin nhắn tạm thời
+                  : msg
+              );
+            });
+          } else {
+            setMessages((prev) => {
+              if (!Array.isArray(prev)) return [newMessage];
+              return prev.map((msg) =>
+                msg.id === newMessage.id
+                  ? { ...msg, status: 'error', errorMessage: response.message }
+                  : msg
+              );
+            });
+            alert(response.message);
+          }
+          onComplete?.();
+        });
+      } catch (error) {
+        console.error('Error sending file:', error);
+        setMessages((prev) => {
+          if (!Array.isArray(prev)) return [newMessage];
+          return prev.map((msg) =>
+            msg.id === newMessage.id
+              ? { ...msg, status: 'error', errorMessage: 'Không thể gửi file.' }
+              : msg
+          );
+        });
+        alert('Không thể gửi file. Vui lòng thử lại.');
+        onComplete?.();
       }
     } else {
       newMessage = {
-        id: Date.now(),
+        id: Date.now(), // ID tạm thời
         senderId: currentUserId,
         content: data.content,
         type: data.type,
         timestamp: new Date().toISOString(),
         status: 'pending',
       };
-      if (chat.isGroup) {
-        data = {
-          type: data.type,
-          content: data.content,
-          metadata: { systemMessage: false },
-        };
-      } else {
-        data = {
-          receiverId: chat.targetUserId,
-          type: data.type,
-          content: data.content,
-          metadata: JSON.stringify({ systemMessage: false }),
-        };
-      }
-      config.headers['Content-Type'] = 'application/json';
-    }
-
-    setMessages((prev) => {
-      if (!Array.isArray(prev)) {
-        console.error('Previous messages state is not an array:', prev);
-        return [newMessage];
-      }
-      return [...prev, newMessage];
-    });
-
-    try {
-      const endpoint = chat.isGroup
-        ? `http://localhost:3000/api/groups/messages/${chat.targetUserId}`
-        : 'http://localhost:3000/api/messages/send';
-
-      const response = await axios.post(endpoint, data, config);
-      if (response.data.success) {
-        setMessages((prev) => {
-          if (!Array.isArray(prev)) {
-            console.error('Previous messages state is not an array:', prev);
-            return [
-              {
-                ...newMessage,
-                id: response.data.data.messageId,
-                content: response.data.data.content || newMessage.content,
-                mediaUrl: response.data.data.mediaUrl,
-                status: response.data.data.status || 'sent',
-              },
-            ];
-          }
-          return prev.map((msg) =>
-            msg.id === newMessage.id
-              ? {
-                  ...msg,
-                  id: response.data.data.messageId,
-                  content: response.data.data.content || msg.content,
-                  mediaUrl: response.data.data.mediaUrl,
-                  status: response.data.data.status || 'sent',
-                }
-              : msg
-          );
-        });
-      } else {
-        throw new Error('Failed to send message: Server returned success=false');
-      }
-    } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Không thể gửi file. Vui lòng thử lại.';
-      console.error('Error sending message:', error.response?.data || error.message);
+  
       setMessages((prev) => {
-        if (!Array.isArray(prev)) {
-          console.error('Previous messages state is not an array:', prev);
-          return [{ ...newMessage, status: 'error' }];
-        }
-        return prev.map((msg) =>
-          msg.id === newMessage.id
-            ? { ...msg, status: 'error', errorMessage }
-            : msg
-        );
+        if (!Array.isArray(prev)) return [newMessage];
+        return [...prev, newMessage];
       });
-      alert(errorMessage);
-    } finally {
-      onComplete?.();
+  
+      console.log('Emitting sendMessage with data:', {
+        receiverId: chat.isGroup ? null : chat.targetUserId,
+        groupId: chat.isGroup ? chat.targetUserId : null,
+        type: data.type,
+        content: data.content,
+      });
+  
+      socket.emit(
+        'sendMessage',
+        {
+          receiverId: chat.isGroup ? null : chat.targetUserId,
+          groupId: chat.isGroup ? chat.targetUserId : null,
+          type: data.type,
+          content: data.content,
+        },
+        (response) => {
+          console.log('Received sendMessage response:', response);
+          if (response.success) {
+            setMessages((prev) => {
+              if (!Array.isArray(prev)) return [response.data];
+              return prev.map((msg) =>
+                msg.id === newMessage.id
+                  ? { ...response.data, id: response.data.messageId } // Cập nhật tin nhắn tạm thời
+                  : msg
+              );
+            });
+          } else {
+            setMessages((prev) => {
+              if (!Array.isArray(prev)) return [newMessage];
+              return prev.map((msg) =>
+                msg.id === newMessage.id
+                  ? { ...msg, status: 'error', errorMessage: response.message }
+                  : msg
+              );
+            });
+            alert(response.message);
+          }
+          onComplete?.();
+        }
+      );
     }
   };
 
   const handleRecallMessage = async (messageId) => {
+    let socket;
     try {
-      const token = localStorage.getItem('token');
-      const endpoint = chat.isGroup
-        ? `http://localhost:3000/api/groups/recall/messages/${chat.targetUserId}/${messageId}`
-        : `http://localhost:3000/api/messages/recall/${messageId}`;
+      socket = getSocket('/chat');
+    } catch (error) {
+      console.error('Socket not initialized:', error.message);
+      alert('Không thể thu hồi tin nhắn. Vui lòng đăng nhập lại.');
+      return;
+    }
 
-      const response = await axios[chat.isGroup ? 'put' : 'patch'](endpoint, {}, {
-        headers: { Authorization: `Bearer ${token.trim()}` },
-      });
-
-      if (response.data.success) {
+    socket.emit('recallMessage', { messageId }, (response) => {
+      if (response.success) {
         setMessages((prev) => {
-          if (!Array.isArray(prev)) {
-            console.error('Previous messages state is not an array:', prev);
-            return [];
-          }
+          if (!Array.isArray(prev)) return prev;
           return prev.map((msg) =>
-            msg.id === messageId || msg.messageId === messageId
+            (msg.id === messageId || msg.messageId === messageId)
               ? { ...msg, status: 'recalled' }
               : msg
           );
         });
+      } else {
+        alert('Không thể thu hồi tin nhắn. Vui lòng thử lại.');
       }
-    } catch (error) {
-      console.error('Error recalling message:', error);
-      alert('Không thể thu hồi tin nhắn. Vui lòng thử lại.');
-    }
+    });
   };
 
   const handleDeleteMessage = async (messageId) => {
+    let socket;
     try {
-      const token = localStorage.getItem('token');
-      const endpoint = chat.isGroup
-        ? `http://localhost:3000/api/groups/messages/${chat.targetUserId}/${messageId}`
-        : `http://localhost:3000/api/messages/${messageId}`;
+      socket = getSocket('/chat');
+    } catch (error) {
+      console.error('Socket not initialized:', error.message);
+      alert('Không thể xóa tin nhắn. Vui lòng đăng nhập lại.');
+      return;
+    }
 
-      const response = await axios.delete(endpoint, {
-        headers: { Authorization: `Bearer ${token.trim()}` },
-      });
-
-      if (response.data.success) {
+    socket.emit('deleteMessage', { messageId }, (response) => {
+      if (response.success) {
         setMessages((prev) => {
-          if (!Array.isArray(prev)) {
-            console.error('Previous messages state is not an array:', prev);
-            return [];
-          }
+          if (!Array.isArray(prev)) return prev;
           return prev.filter((msg) => msg.id !== messageId && msg.messageId !== messageId);
         });
+      } else {
+        alert('Không thể xóa tin nhắn. Vui lòng thử lại.');
       }
-    } catch (error) {
-      console.error('Error deleting message:', error);
-      alert('Không thể xóa tin nhắn. Vui lòng thử lại.');
-    }
+    });
   };
 
   const handleForwardMessage = async (messageId, targetUserId) => {
+    let socket;
     try {
-      const token = localStorage.getItem('token');
-      const endpoint = chat.isGroup
-        ? `http://localhost:3000/api/groups/forward-to-user`
-        : `http://localhost:3000/api/messages/forward`;
-
-      const payload = chat.isGroup
-        ? { messageId, sourceGroupId: chat.targetUserId, targetReceiverId: targetUserId }
-        : { messageId, targetReceiverId: targetUserId };
-
-      const response = await axios.post(endpoint, payload, {
-        headers: { Authorization: `Bearer ${token.trim()}` },
-      });
-
-      if (response.data.success) {
-        return true;
-      }
+      socket = getSocket('/chat');
     } catch (error) {
-      console.error('Error forwarding message:', error);
-      alert('Không thể chuyển tiếp tin nhắn. Vui lòng thử lại.');
-      return false;
+      console.error('Socket not initialized:', error.message);
+      alert('Không thể chuyển tiếp tin nhắn. Vui lòng đăng nhập lại.');
+      return;
     }
+
+    socket.emit('forwardMessage', { messageId, targetReceiverId: targetUserId }, (response) => {
+      if (!response.success) {
+        alert('Không thể chuyển tiếp tin nhắn. Vui lòng thử lại.');
+      }
+    });
   };
 
   const handleAddFriendRequest = async () => {
-    const token = localStorage.getItem('token');
     try {
       const response = await axios.post(
         'http://localhost:3000/api/friends/send',
@@ -348,7 +405,6 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
   };
 
   const handleAcceptRequest = async () => {
-    const token = localStorage.getItem('token');
     try {
       const response = await axios.get('http://localhost:3000/api/friends/received', {
         headers: { Authorization: `Bearer ${token.trim()}` },

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import '../../assets/styles/ChatWindow.css';
 import '../../assets/styles/MessageList.css';
 import { FaUndo, FaTrash, FaShare } from 'react-icons/fa';
+import { getSocket } from '../../utils/socket';
 
 const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, onForwardMessage, chat }) => {
   const currentUserId = JSON.parse(localStorage.getItem('user') || '{}')?.userId;
@@ -9,6 +10,27 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
   const [messageToDelete, setMessageToDelete] = useState(null);
   const [fullscreenMedia, setFullscreenMedia] = useState(null);
   const [mediaLoadError, setMediaLoadError] = useState(null);
+
+  useEffect(() => {
+    let socket;
+    try {
+      socket = getSocket('/chat');
+    } catch (error) {
+      console.error('Socket not initialized:', error.message);
+      return;
+    }
+
+    // Đánh dấu tin nhắn là seen khi người dùng xem
+    messages.forEach((message) => {
+      if (
+        message.senderId !== currentUserId &&
+        message.status !== 'seen' &&
+        message.status !== 'recalled'
+      ) {
+        socket.emit('markMessageAsSeen', { messageId: message.id || message.messageId });
+      }
+    });
+  }, [messages, currentUserId]);
 
   const handleDeleteClick = (messageId) => {
     setMessageToDelete(messageId);
@@ -58,30 +80,24 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
     const isMediaMessage = (message.type === 'image' || message.type === 'video') && message.mediaUrl;
     const isImageMessage = message.type === 'image' && message.mediaUrl;
 
-    // Tính khoảng cách thời gian giữa tin nhắn hiện tại và tin nhắn trước đó
     const currentTimestamp = new Date(message.timestamp).getTime();
-    const timeDifference = lastTimestamp ? (currentTimestamp - lastTimestamp) / 1000 : Infinity; // Chuyển sang giây
-    const timeThreshold = 15; // Ngưỡng 1 phút (60 giây)
+    const timeDifference = lastTimestamp ? (currentTimestamp - lastTimestamp) / 1000 : Infinity;
+    const timeThreshold = 15;
 
-    // Nếu tin nhắn là ảnh, cùng người gửi, và khoảng cách thời gian nhỏ hơn ngưỡng
     if (isImageMessage && isSameSenderAsPrevious && timeDifference <= timeThreshold) {
       currentGroup.push(message);
     } else {
-      // Nếu không phải ảnh, không cùng người gửi, hoặc vượt ngưỡng thời gian, đóng nhóm hiện tại (nếu có)
       if (currentGroup.length > 0) {
         groupedMessages.push({ type: 'image-group', messages: currentGroup, senderId: lastSenderId });
         currentGroup = [];
       }
-      // Nếu tin nhắn hiện tại là ảnh, bắt đầu nhóm mới
       if (isImageMessage) {
         currentGroup.push(message);
       } else {
-        // Nếu không phải ảnh, thêm tin nhắn riêng lẻ
         groupedMessages.push(message);
       }
     }
 
-    // Nếu đây là tin nhắn cuối cùng, đóng nhóm (nếu có)
     if (index === messages.length - 1 && currentGroup.length > 0) {
       groupedMessages.push({ type: 'image-group', messages: currentGroup, senderId: lastSenderId });
     }
@@ -140,7 +156,6 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                     </span>
                   )}
                   {isGroupMessage ? (
-                    // Nhóm ảnh
                     <div className="media-message-group">
                       {groupMessages.map((message, idx) => (
                         <div key={message.id || message.messageId} className="media-message-container">
@@ -164,7 +179,6 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                       ))}
                     </div>
                   ) : (
-                    // Tin nhắn không phải ảnh hoặc video
                     <div className="message-content">
                       {chat?.isGroup && showAvatarAndName && !isGroupMessage && (
                         <span className="message-sender-name-inline">
