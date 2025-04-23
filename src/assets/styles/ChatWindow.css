@@ -7,6 +7,7 @@
 .message {
   margin-bottom: 10px;
   display: flex;
+  align-items: flex-start; /* Căn chỉnh các phần tử theo đỉnh */
 }
 
 .message-left {
@@ -15,6 +16,32 @@
 
 .message-right {
   justify-content: flex-end;
+}
+
+.message-sender-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-right: 10px;
+}
+
+.message-sender-info-placeholder {
+  width: 40px; /* Độ rộng tương đương với avatar để căn chỉnh */
+  margin-right: 10px;
+}
+
+.message-sender-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.message-sender-name {
+  font-size: 0.8em;
+  color: #666;
+  margin-top: 2px;
+  text-align: center;
 }
 
 .message-content {

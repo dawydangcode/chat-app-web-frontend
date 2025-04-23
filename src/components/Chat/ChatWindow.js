@@ -51,9 +51,9 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       }
 
       try {
-        // Nếu là nhóm chat, gọi API lấy tin nhắn nhóm
+        // Sử dụng endpoint phù hợp dựa trên loại chat
         const endpoint = chat.isGroup
-          ? `http://localhost:3000/api/messages/group/${chat.targetUserId}`
+          ? `http://localhost:3000/api/groups/messages/${chat.targetUserId}` // GET /messages/:groupId
           : `http://localhost:3000/api/messages/user/${chat.targetUserId}`;
 
         const response = await axios.get(endpoint, {
@@ -61,7 +61,8 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         });
 
         if (response.data.success) {
-          setMessages(response.data.messages || []);
+          // Với nhóm chat, dữ liệu nằm trong response.data.data.messages
+          setMessages(chat.isGroup ? response.data.data.messages || [] : response.data.messages || []);
         }
       } catch (error) {
         if (error.response?.status === 401) {
@@ -134,11 +135,12 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         status: 'pending',
       };
       if (chat.isGroup) {
-        data.append('groupId', chat.targetUserId);
+        // FormData sẽ được gửi trực tiếp cho nhóm chat
+        data.append('metadata', JSON.stringify({ systemMessage: false }));
       } else {
         data.append('receiverId', chat.targetUserId);
+        data.append('metadata', JSON.stringify({ systemMessage: false }));
       }
-      data.append('metadata', JSON.stringify({ systemMessage: false }));
     } else {
       newMessage = {
         id: Date.now(),
@@ -148,20 +150,30 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         timestamp: new Date().toISOString(),
         status: 'pending',
       };
-      data = {
-        ...(chat.isGroup ? { groupId: chat.targetUserId } : { receiverId: chat.targetUserId }),
-        type: data.type,
-        content: data.content,
-        metadata: JSON.stringify({ systemMessage: false }),
-      };
+      if (chat.isGroup) {
+        // Dữ liệu dạng JSON cho nhóm chat
+        data = {
+          type: data.type,
+          content: data.content,
+          metadata: { systemMessage: false },
+        };
+      } else {
+        data = {
+          receiverId: chat.targetUserId,
+          type: data.type,
+          content: data.content,
+          metadata: JSON.stringify({ systemMessage: false }),
+        };
+      }
       config.headers['Content-Type'] = 'application/json';
     }
 
     setMessages((prev) => [...prev, newMessage]);
 
     try {
+      // Sử dụng endpoint phù hợp dựa trên loại chat
       const endpoint = chat.isGroup
-        ? 'http://localhost:3000/api/messages/send-to-group'
+        ? `http://localhost:3000/api/groups/messages/${chat.targetUserId}` // POST /messages/:groupId
         : 'http://localhost:3000/api/messages/send';
 
       const response = await axios.post(endpoint, data, config);
@@ -192,11 +204,15 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
   const handleRecallMessage = async (messageId) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.patch(
-        `http://localhost:3000/api/messages/recall/${messageId}`,
-        {},
-        { headers: { Authorization: `Bearer ${token.trim()}` } }
-      );
+      // Sử dụng endpoint phù hợp dựa trên loại chat
+      const endpoint = chat.isGroup
+        ? `http://localhost:3000/api/groups/recall/messages/${chat.targetUserId}/${messageId}` // PUT /recall/messages/:groupId/:messageId
+        : `http://localhost:3000/api/messages/recall/${messageId}`;
+
+      const response = await axios[chat.isGroup ? 'put' : 'patch'](endpoint, {}, {
+        headers: { Authorization: `Bearer ${token.trim()}` },
+      });
+
       if (response.data.success) {
         setMessages((prev) =>
           prev.map((msg) =>
@@ -206,36 +222,54 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
           )
         );
       }
-    } catch (error) {}
+    } catch (error) {
+      console.error('Error recalling message:', error);
+    }
   };
 
   const handleDeleteMessage = async (messageId) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.delete(
-        `http://localhost:3000/api/messages/${messageId}`,
-        { headers: { Authorization: `Bearer ${token.trim()}` } }
-      );
+      // Sử dụng endpoint phù hợp dựa trên loại chat
+      const endpoint = chat.isGroup
+        ? `http://localhost:3000/api/groups/messages/${chat.targetUserId}/${messageId}` // DELETE /messages/:groupId/:messageId
+        : `http://localhost:3000/api/messages/${messageId}`;
+
+      const response = await axios.delete(endpoint, {
+        headers: { Authorization: `Bearer ${token.trim()}` },
+      });
+
       if (response.data.success) {
         setMessages((prev) =>
           prev.filter((msg) => msg.id !== messageId && msg.messageId !== messageId)
         );
       }
-    } catch (error) {}
+    } catch (error) {
+      console.error('Error deleting message:', error);
+    }
   };
 
   const handleForwardMessage = async (messageId, targetUserId) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.post(
-        `http://localhost:3000/api/messages/forward`,
-        { messageId, targetReceiverId: targetUserId },
-        { headers: { Authorization: `Bearer ${token.trim()}` } }
-      );
+      // Sử dụng endpoint phù hợp dựa trên loại chat
+      const endpoint = chat.isGroup
+        ? `http://localhost:3000/api/groups/forward-to-user` // POST /forward-to-user
+        : `http://localhost:3000/api/messages/forward`;
+
+      const payload = chat.isGroup
+        ? { messageId, sourceGroupId: chat.targetUserId, targetReceiverId: targetUserId }
+        : { messageId, targetReceiverId: targetUserId };
+
+      const response = await axios.post(endpoint, payload, {
+        headers: { Authorization: `Bearer ${token.trim()}` },
+      });
+
       if (response.data.success) {
         return true;
       }
     } catch (error) {
+      console.error('Error forwarding message:', error);
       return false;
     }
   };
