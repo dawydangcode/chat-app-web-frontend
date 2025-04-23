@@ -2,18 +2,21 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
+import CreateGroupModal from '../CreateGroupModal';
 import '../../assets/styles/ChatWindow.css';
 import { useNavigate } from 'react-router-dom';
+import { VscLayoutSidebarRightOff } from 'react-icons/vsc';
+import { AiOutlineUsergroupAdd } from 'react-icons/ai';
 
 const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
   const [messages, setMessages] = useState([]);
-  const [recentChats, setRecentChats] = useState([]);
-  const [friendStatus, setFriendStatus] = useState(null); // Trạng thái kết bạn
+  const [recentMessages, setRecentMessages] = useState([]);
+  const [friendStatus, setFriendStatus] = useState(null);
+  const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
   const navigate = useNavigate();
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const currentUserId = currentUser?.userId;
 
-  // Lấy trạng thái kết bạn (chỉ gọi nếu không phải nhóm chat)
   const fetchFriendStatus = async () => {
     if (!currentUserId || !chat?.targetUserId) return;
 
@@ -51,20 +54,24 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       }
 
       try {
-        // Sử dụng endpoint phù hợp dựa trên loại chat
         const endpoint = chat.isGroup
-          ? `http://localhost:3000/api/groups/messages/${chat.targetUserId}` // GET /messages/:groupId
+          ? `http://localhost:3000/api/groups/messages/${chat.targetUserId}`
           : `http://localhost:3000/api/messages/user/${chat.targetUserId}`;
 
         const response = await axios.get(endpoint, {
           headers: { Authorization: `Bearer ${token.trim()}` },
         });
 
+        console.log('Fetched messages response:', response.data);
+
         if (response.data.success) {
-          // Với nhóm chat, dữ liệu nằm trong response.data.data.messages
-          setMessages(chat.isGroup ? response.data.data.messages || [] : response.data.messages || []);
+          const fetchedMessages = chat.isGroup ? response.data.data.messages || [] : response.data.messages || [];
+          setMessages(fetchedMessages);
+        } else {
+          setMessages([]);
         }
       } catch (error) {
+        console.error('Error fetching messages:', error);
         if (error.response?.status === 401) {
           localStorage.removeItem('token');
           localStorage.removeItem('user');
@@ -90,33 +97,34 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
             id: conv.otherUserId,
             name: conv.displayName || 'Không có tên',
           }));
-          setRecentChats(formattedChats);
+          setRecentMessages(formattedChats);
         }
       } catch (error) {
-        setRecentChats([]);
+        setRecentMessages([]);
       }
     };
 
     fetchMessages();
     fetchRecentChats();
 
-    // Chỉ lấy trạng thái kết bạn nếu không phải nhóm chat
     if (!chat?.isGroup) {
       fetchFriendStatus();
     } else {
-      setFriendStatus(null); // Đặt friendStatus về null nếu là nhóm chat
+      setFriendStatus(null);
     }
   }, [chat, navigate, currentUserId]);
 
-  const handleSendMessage = async (data) => {
+  const handleSendMessage = async (data, onComplete) => {
     if (!currentUserId || !chat?.targetUserId) {
       navigate('/login');
+      onComplete?.();
       return;
     }
 
     const token = localStorage.getItem('token');
     if (!token || !token.startsWith('eyJ')) {
       navigate('/login');
+      onComplete?.();
       return;
     }
 
@@ -124,21 +132,29 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
     let config = { headers: { Authorization: `Bearer ${token.trim()}` } };
 
     if (data instanceof FormData) {
+      const messageType = data.get('type') || 'file'; // Sử dụng type từ FormData
       newMessage = {
         id: Date.now(),
         senderId: currentUserId,
         content: 'Đang tải file...',
-        type: data.get('type'),
+        type: messageType,
         fileName: data.get('fileName'),
         mimeType: data.get('mimeType'),
         timestamp: new Date().toISOString(),
         status: 'pending',
       };
+
+      const formDataEntries = {};
+      for (let [key, value] of data.entries()) {
+        formDataEntries[key] = value;
+      }
+      console.log('Sending FormData:', formDataEntries);
+
       if (chat.isGroup) {
-        // FormData sẽ được gửi trực tiếp cho nhóm chat
         data.append('metadata', JSON.stringify({ systemMessage: false }));
       } else {
         data.append('receiverId', chat.targetUserId);
+        data.append('content', 'File attachment');
         data.append('metadata', JSON.stringify({ systemMessage: false }));
       }
     } else {
@@ -151,7 +167,6 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         status: 'pending',
       };
       if (chat.isGroup) {
-        // Dữ liệu dạng JSON cho nhóm chat
         data = {
           type: data.type,
           content: data.content,
@@ -168,18 +183,35 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       config.headers['Content-Type'] = 'application/json';
     }
 
-    setMessages((prev) => [...prev, newMessage]);
+    setMessages((prev) => {
+      if (!Array.isArray(prev)) {
+        console.error('Previous messages state is not an array:', prev);
+        return [newMessage];
+      }
+      return [...prev, newMessage];
+    });
 
     try {
-      // Sử dụng endpoint phù hợp dựa trên loại chat
       const endpoint = chat.isGroup
-        ? `http://localhost:3000/api/groups/messages/${chat.targetUserId}` // POST /messages/:groupId
+        ? `http://localhost:3000/api/groups/messages/${chat.targetUserId}`
         : 'http://localhost:3000/api/messages/send';
 
       const response = await axios.post(endpoint, data, config);
       if (response.data.success) {
-        setMessages((prev) =>
-          prev.map((msg) =>
+        setMessages((prev) => {
+          if (!Array.isArray(prev)) {
+            console.error('Previous messages state is not an array:', prev);
+            return [
+              {
+                ...newMessage,
+                id: response.data.data.messageId,
+                content: response.data.data.content || newMessage.content,
+                mediaUrl: response.data.data.mediaUrl,
+                status: response.data.data.status || 'sent',
+              },
+            ];
+          }
+          return prev.map((msg) =>
             msg.id === newMessage.id
               ? {
                   ...msg,
@@ -189,24 +221,36 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
                   status: response.data.data.status || 'sent',
                 }
               : msg
-          )
-        );
+          );
+        });
+      } else {
+        throw new Error('Failed to send message: Server returned success=false');
       }
     } catch (error) {
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === newMessage.id ? { ...msg, status: 'error' } : msg
-        )
-      );
+      const errorMessage = error.response?.data?.message || 'Không thể gửi file. Vui lòng thử lại.';
+      console.error('Error sending message:', error.response?.data || error.message);
+      setMessages((prev) => {
+        if (!Array.isArray(prev)) {
+          console.error('Previous messages state is not an array:', prev);
+          return [{ ...newMessage, status: 'error' }];
+        }
+        return prev.map((msg) =>
+          msg.id === newMessage.id
+            ? { ...msg, status: 'error', errorMessage }
+            : msg
+        );
+      });
+      alert(errorMessage);
+    } finally {
+      onComplete?.();
     }
   };
 
   const handleRecallMessage = async (messageId) => {
     try {
       const token = localStorage.getItem('token');
-      // Sử dụng endpoint phù hợp dựa trên loại chat
       const endpoint = chat.isGroup
-        ? `http://localhost:3000/api/groups/recall/messages/${chat.targetUserId}/${messageId}` // PUT /recall/messages/:groupId/:messageId
+        ? `http://localhost:3000/api/groups/recall/messages/${chat.targetUserId}/${messageId}`
         : `http://localhost:3000/api/messages/recall/${messageId}`;
 
       const response = await axios[chat.isGroup ? 'put' : 'patch'](endpoint, {}, {
@@ -214,25 +258,29 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       });
 
       if (response.data.success) {
-        setMessages((prev) =>
-          prev.map((msg) =>
+        setMessages((prev) => {
+          if (!Array.isArray(prev)) {
+            console.error('Previous messages state is not an array:', prev);
+            return [];
+          }
+          return prev.map((msg) =>
             msg.id === messageId || msg.messageId === messageId
               ? { ...msg, status: 'recalled' }
               : msg
-          )
-        );
+          );
+        });
       }
     } catch (error) {
       console.error('Error recalling message:', error);
+      alert('Không thể thu hồi tin nhắn. Vui lòng thử lại.');
     }
   };
 
   const handleDeleteMessage = async (messageId) => {
     try {
       const token = localStorage.getItem('token');
-      // Sử dụng endpoint phù hợp dựa trên loại chat
       const endpoint = chat.isGroup
-        ? `http://localhost:3000/api/groups/messages/${chat.targetUserId}/${messageId}` // DELETE /messages/:groupId/:messageId
+        ? `http://localhost:3000/api/groups/messages/${chat.targetUserId}/${messageId}`
         : `http://localhost:3000/api/messages/${messageId}`;
 
       const response = await axios.delete(endpoint, {
@@ -240,21 +288,25 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       });
 
       if (response.data.success) {
-        setMessages((prev) =>
-          prev.filter((msg) => msg.id !== messageId && msg.messageId !== messageId)
-        );
+        setMessages((prev) => {
+          if (!Array.isArray(prev)) {
+            console.error('Previous messages state is not an array:', prev);
+            return [];
+          }
+          return prev.filter((msg) => msg.id !== messageId && msg.messageId !== messageId);
+        });
       }
     } catch (error) {
       console.error('Error deleting message:', error);
+      alert('Không thể xóa tin nhắn. Vui lòng thử lại.');
     }
   };
 
   const handleForwardMessage = async (messageId, targetUserId) => {
     try {
       const token = localStorage.getItem('token');
-      // Sử dụng endpoint phù hợp dựa trên loại chat
       const endpoint = chat.isGroup
-        ? `http://localhost:3000/api/groups/forward-to-user` // POST /forward-to-user
+        ? `http://localhost:3000/api/groups/forward-to-user`
         : `http://localhost:3000/api/messages/forward`;
 
       const payload = chat.isGroup
@@ -270,6 +322,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       }
     } catch (error) {
       console.error('Error forwarding message:', error);
+      alert('Không thể chuyển tiếp tin nhắn. Vui lòng thử lại.');
       return false;
     }
   };
@@ -322,6 +375,19 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
     }
   };
 
+  const handleAddMemberClick = () => {
+    if (chat.isGroup) {
+      alert('Chức năng thêm thành viên nhóm sẽ được triển khai sau!');
+    } else {
+      setIsCreateGroupModalOpen(true);
+    }
+  };
+
+  const handleGroupCreated = (newGroup) => {
+    alert(`Nhóm "${newGroup.name}" đã được tạo thành công!`);
+    setIsCreateGroupModalOpen(false);
+  };
+
   return (
     <div className="chat-window">
       <div className="chat-header">
@@ -334,11 +400,16 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
           <h3>{chat?.name || 'Không có tên'}</h3>
           <p>{chat?.phoneNumber && !chat.isGroup ? `+${chat.phoneNumber}` : chat.isGroup ? 'Nhóm chat' : 'Chưa có số điện thoại'}</p>
         </div>
-        <button className="toggle-info-btn" onClick={toggleInfo}>
-          {isInfoVisible ? 'Ẩn thông tin' : 'Hiện thông tin'}
-        </button>
+        <div className="chat-header-actions">
+          <button className="add-member-btn" onClick={handleAddMemberClick}>
+            <AiOutlineUsergroupAdd size={30} />
+          </button>
+          <button className="toggle-info-btn-chat-header" onClick={toggleInfo}>
+            <VscLayoutSidebarRightOff size={30} />
+          </button>
+        </div>
       </div>
-      {/* Chỉ hiển thị banner nếu không phải nhóm chat và có trạng thái kết bạn */}
+
       {!chat?.isGroup && friendStatus && friendStatus !== 'friend' && (
         <div className="friend-status-banner">
           {friendStatus === 'stranger' && (
@@ -364,12 +435,20 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       )}
       <MessageList
         messages={messages}
-        recentChats={recentChats}
+        recentChats={recentMessages}
         onRecallMessage={handleRecallMessage}
         onDeleteMessage={handleDeleteMessage}
         onForwardMessage={handleForwardMessage}
+        chat={chat}
       />
       <MessageInput onSendMessage={handleSendMessage} />
+
+      <CreateGroupModal
+        isOpen={isCreateGroupModalOpen}
+        onClose={() => setIsCreateGroupModalOpen(false)}
+        onGroupCreated={handleGroupCreated}
+        preSelectedUser={chat?.isGroup ? null : chat?.targetUserId}
+      />
     </div>
   );
 };

@@ -290,7 +290,7 @@ const ChatPage = () => {
     const token = localStorage.getItem('token');
     try {
       const response = await axios.get(
-        `http://localhost:3000/api/search/users/by-phone?phoneNumber=${encodeURIComponent(query)}`,
+        `http://localhost:3000/api/searchs/users/by-phone?phoneNumber=${encodeURIComponent(query)}`,
         { headers: { Authorization: `Bearer ${token.trim()}` } },
       );
 

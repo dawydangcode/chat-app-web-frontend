@@ -1,3 +1,6 @@
+.chat-window {
+  font-family: SegoeuiPc, Segoe UI, San Francisco, Helvetica Neue, Helvetica, Lucida Grande, Roboto, Ubuntu, Tahoma, Microsoft Sans Serif, Arial, sans-serif;
+}
 .message-list {
   flex: 1;
   overflow-y: auto;
@@ -12,6 +15,7 @@
 
 .message-left {
   justify-content: flex-start;
+  
 }
 
 .message-right {
@@ -53,11 +57,18 @@
 
 .message-left .message-content {
   background-color: #fff;
+  
+  border: 1px solid #ddd;
+
+  border-radius: 6px;
+  
 }
 
 .message-right .message-content {
   background-color: #0084ff;
   color: white;
+  border: 1px solid #ddd;
+
 }
 
 .message-time {
@@ -145,4 +156,67 @@
   background-color: #e7f3ff;
   color: #0056ff;
   border: 1px solid #0056ff;
+}
+
+/* Style cho chat header */
+.chat-header {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  background-color: #ffffff;
+  border-bottom: 1px solid #ddd;
+  border-left: 1px solid #ddd;
+  position: relative;
+}
+
+.chat-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  margin-right: 10px;
+}
+
+.chat-info {
+  flex: 1;
+}
+
+.chat-info h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.chat-info p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.chat-header-actions {
+  display: flex;
+  gap: 10px;
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.toggle-info-btn-chat-header,
+.add-member-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 45px;
+  height: 35px;
+  background-color: #ffffff;
+  color: black;
+  border: unset;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 100px;
+  transition: background-color 0.1s ease;
+}
+
+.toggle-info-btn-chat-header:hover,
+.add-member-btn:hover {
+  background-color: #e5e7eb;
 }
