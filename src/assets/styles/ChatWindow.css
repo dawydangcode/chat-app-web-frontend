@@ -82,3 +82,40 @@
   border-radius: 20px;
   cursor: pointer;
 }
+
+/* Style cho banner trạng thái kết bạn */
+.friend-status-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  background-color: #e7f3ff;
+  border-bottom: 1px solid #ddd;
+  gap: 10px;
+}
+
+.friend-status-banner p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #333;
+}
+
+.add-friend-btn,
+.accept-friend-btn {
+  padding: 5px 15px;
+  border-radius: 5px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.add-friend-btn {
+  background-color: #005AE0;
+  color: white;
+  border: none;
+}
+
+.accept-friend-btn {
+  background-color: #e7f3ff;
+  color: #0056ff;
+  border: 1px solid #0056ff;
+}

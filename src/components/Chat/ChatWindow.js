@@ -8,9 +8,34 @@ import { useNavigate } from 'react-router-dom';
 const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
   const [messages, setMessages] = useState([]);
   const [recentChats, setRecentChats] = useState([]);
+  const [friendStatus, setFriendStatus] = useState(null); // Trạng thái kết bạn
   const navigate = useNavigate();
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const currentUserId = currentUser?.userId;
+
+  // Lấy trạng thái kết bạn
+  const fetchFriendStatus = async () => {
+    if (!currentUserId || !chat?.targetUserId) return;
+
+    const token = localStorage.getItem('token');
+    if (!token || !token.startsWith('eyJ')) return;
+
+    try {
+      const response = await axios.get(
+        `http://localhost:3000/api/friends/status/${chat.targetUserId}`,
+        { headers: { Authorization: `Bearer ${token.trim()}` } }
+      );
+
+      if (response.data && response.data.status) {
+        setFriendStatus(response.data.status);
+      } else {
+        setFriendStatus('stranger');
+      }
+    } catch (error) {
+      console.error('Error fetching friend status:', error);
+      setFriendStatus('stranger');
+    }
+  };
 
   useEffect(() => {
     const fetchMessages = async () => {
@@ -68,6 +93,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
 
     fetchMessages();
     fetchRecentChats();
+    fetchFriendStatus(); // Gọi hàm lấy trạng thái kết bạn
   }, [chat, navigate, currentUserId]);
 
   const handleSendMessage = async (data) => {
@@ -133,7 +159,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
                   id: response.data.data.messageId,
                   content: response.data.data.content || msg.content,
                   mediaUrl: response.data.data.mediaUrl,
-                  status: response.data.data.status || 'sent', // Đảm bảo status được cập nhật
+                  status: response.data.data.status || 'sent',
                 }
               : msg
           )
@@ -199,6 +225,54 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
     }
   };
 
+  const handleAddFriendRequest = async () => {
+    const token = localStorage.getItem('token');
+    try {
+      const response = await axios.post(
+        'http://localhost:3000/api/friends/send',
+        { receiverId: chat.targetUserId, message: `Xin chào, mình là ${currentUser.name}, hãy kết bạn với mình nhé!` },
+        { headers: { Authorization: `Bearer ${token.trim()}` } }
+      );
+
+      if (response.data && response.data.message) {
+        alert('Đã gửi yêu cầu kết bạn thành công!');
+        setFriendStatus('pending_sent');
+      } else {
+        alert('Không thể gửi yêu cầu kết bạn.');
+      }
+    } catch (error) {
+      alert('Lỗi khi gửi yêu cầu kết bạn: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleAcceptRequest = async () => {
+    const token = localStorage.getItem('token');
+    try {
+      const response = await axios.get('http://localhost:3000/api/friends/received', {
+        headers: { Authorization: `Bearer ${token.trim()}` },
+      });
+
+      const request = response.data.find((req) => req.senderId === chat.targetUserId);
+      if (!request) {
+        alert('Không tìm thấy lời mời kết bạn.');
+        return;
+      }
+
+      const acceptResponse = await axios.post(
+        'http://localhost:3000/api/friends/accept',
+        { requestId: request.requestId },
+        { headers: { Authorization: `Bearer ${token.trim()}` } }
+      );
+
+      if (acceptResponse.data && acceptResponse.data.message) {
+        alert('Đã chấp nhận lời mời kết bạn!');
+        setFriendStatus('friend');
+      }
+    } catch (error) {
+      alert('Lỗi khi chấp nhận lời mời: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
   return (
     <div className="chat-window">
       <div className="chat-header">
@@ -215,6 +289,29 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
           {isInfoVisible ? 'Ẩn thông tin' : 'Hiện thông tin'}
         </button>
       </div>
+      {friendStatus && friendStatus !== 'friend' && (
+        <div className="friend-status-banner">
+          {friendStatus === 'stranger' && (
+            <>
+              <p>Gửi yêu cầu kết bạn tới người này</p>
+              <button className="add-friend-btn" onClick={handleAddFriendRequest}>
+                Gửi kết bạn
+              </button>
+            </>
+          )}
+          {friendStatus === 'pending_sent' && (
+            <p>Bạn đã gửi yêu cầu kết bạn và đang chờ người này đồng ý</p>
+          )}
+          {friendStatus === 'pending_received' && (
+            <>
+              <p>Đang chờ được đồng ý kết bạn</p>
+              <button className="accept-friend-btn" onClick={handleAcceptRequest}>
+                Đồng ý
+              </button>
+            </>
+          )}
+        </div>
+      )}
       <MessageList
         messages={messages}
         recentChats={recentChats}
