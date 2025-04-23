@@ -37,6 +37,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
 
         if (response.data.success) {
           const fetchedMessages = chat.isGroup ? response.data.data.messages || [] : response.data.messages || [];
+          console.log('Fetched messages:', fetchedMessages);
           setMessages(fetchedMessages);
         } else {
           setMessages([]);
@@ -101,32 +102,33 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
     let socket;
     try {
       socket = getSocket('/chat');
+      console.log('Socket initialized:', socket.id);
     } catch (error) {
       console.error('Socket not initialized:', error.message);
       navigate('/login');
       return;
     }
 
+    // Tham gia phòng của user hiện tại và phòng chat
+    socket.emit('joinRoom', { room: `user:${currentUserId}` });
     socket.emit('joinRoom', { room: chat.isGroup ? `group:${chat.targetUserId}` : `user:${chat.targetUserId}` });
 
     socket.on('receiveMessage', (newMessage) => {
+      console.log('Received message:', newMessage);
       if (
         (chat.isGroup && newMessage.groupId === chat.targetUserId) ||
         (!chat.isGroup && (newMessage.senderId === chat.targetUserId || newMessage.receiverId === chat.targetUserId))
       ) {
         setMessages((prev) => {
           if (!Array.isArray(prev)) return [newMessage];
-          // Kiểm tra xem tin nhắn đã tồn tại chưa (dựa trên messageId)
           const existingMessageIndex = prev.findIndex(
             (msg) => msg.id === newMessage.messageId || msg.messageId === newMessage.messageId
           );
           if (existingMessageIndex !== -1) {
-            // Cập nhật tin nhắn hiện có
             return prev.map((msg, index) =>
               index === existingMessageIndex ? { ...newMessage, id: newMessage.messageId } : msg
             );
           }
-          // Thêm tin nhắn mới nếu chưa tồn tại
           return [...prev, newMessage];
         });
       }
@@ -142,6 +144,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
     });
 
     socket.on('messageRecalled', ({ messageId }) => {
+      console.log('Message recalled:', { messageId });
       setMessages((prev) => {
         if (!Array.isArray(prev)) return prev;
         return prev.map((msg) =>
@@ -178,7 +181,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       onComplete?.();
       return;
     }
-  
+
     let socket;
     try {
       socket = getSocket('/chat');
@@ -189,12 +192,12 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       onComplete?.();
       return;
     }
-  
+
     let newMessage;
-  
+
     if (data instanceof FormData) {
       newMessage = {
-        id: Date.now() + Math.random(), // ID tạm thời
+        id: Date.now() + Math.random(),
         senderId: currentUserId,
         content: 'Đang tải file...',
         type: data.get('type') || 'file',
@@ -203,12 +206,12 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         timestamp: new Date().toISOString(),
         status: 'pending',
       };
-  
+
       setMessages((prev) => {
         if (!Array.isArray(prev)) return [newMessage];
         return [...prev, newMessage];
       });
-  
+
       try {
         const file = data.get('file');
         const messageData = {
@@ -222,9 +225,9 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
             mimeType: newMessage.mimeType,
           },
         };
-  
+
         console.log('Emitting sendMessage with data:', messageData);
-  
+
         socket.emit('sendMessage', messageData, (response) => {
           console.log('Received sendMessage response:', response);
           if (response.success) {
@@ -232,7 +235,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
               if (!Array.isArray(prev)) return [response.data];
               return prev.map((msg) =>
                 msg.id === newMessage.id
-                  ? { ...response.data, id: response.data.messageId } // Cập nhật tin nhắn tạm thời
+                  ? { ...response.data, id: response.data.messageId }
                   : msg
               );
             });
@@ -264,26 +267,26 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       }
     } else {
       newMessage = {
-        id: Date.now(), // ID tạm thời
+        id: Date.now(),
         senderId: currentUserId,
         content: data.content,
         type: data.type,
         timestamp: new Date().toISOString(),
         status: 'pending',
       };
-  
+
       setMessages((prev) => {
         if (!Array.isArray(prev)) return [newMessage];
         return [...prev, newMessage];
       });
-  
+
       console.log('Emitting sendMessage with data:', {
         receiverId: chat.isGroup ? null : chat.targetUserId,
         groupId: chat.isGroup ? chat.targetUserId : null,
         type: data.type,
         content: data.content,
       });
-  
+
       socket.emit(
         'sendMessage',
         {
@@ -299,7 +302,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
               if (!Array.isArray(prev)) return [response.data];
               return prev.map((msg) =>
                 msg.id === newMessage.id
-                  ? { ...response.data, id: response.data.messageId } // Cập nhật tin nhắn tạm thời
+                  ? { ...response.data, id: response.data.messageId }
                   : msg
               );
             });
