@@ -132,9 +132,9 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
     let config = { headers: { Authorization: `Bearer ${token.trim()}` } };
 
     if (data instanceof FormData) {
-      const messageType = data.get('type') || 'file'; // Sử dụng type từ FormData
+      const messageType = data.get('type') || 'file';
       newMessage = {
-        id: Date.now(),
+        id: Date.now() + Math.random(),
         senderId: currentUserId,
         content: 'Đang tải file...',
         type: messageType,
@@ -441,7 +441,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         onForwardMessage={handleForwardMessage}
         chat={chat}
       />
-      <MessageInput onSendMessage={handleSendMessage} />
+      <MessageInput onSendMessage={handleSendMessage} chat={chat} />
 
       <CreateGroupModal
         isOpen={isCreateGroupModalOpen}

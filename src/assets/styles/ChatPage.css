@@ -9,7 +9,7 @@ body {
 
 .parent {
   display: grid;
-  grid-template-columns: 70px 350px 1fr 250px;
+  grid-template-columns: 70px 350px 1fr 300px; /* Thêm cột cho div4 */
   grid-template-rows: 1fr;
   height: 100vh;
   width: 100vw;
@@ -31,12 +31,16 @@ body {
   flex-direction: column;
 }
 .div3 {
-  grid-area: 1 / 3 / 6 / 8; /* Mặc định: div3 chiếm từ cột 3 đến cột 8 */
+  grid-area: 1 / 3 / 6 / 4; /* div3 chiếm cột 3 */
 }
 .div3.expanded {
-  grid-area: 1 / 3 / 6 / 11; /* Khi div4 ẩn: div3 mở rộng đến cột 11 */
+  grid-area: 1 / 3 / 6 / 5; /* Khi div4 ẩn, div3 mở rộng sang cột 4 */
 }
-.div4 { grid-area: 1 / 8 / 6 / 11; }
+.div4 {
+  grid-area: 1 / 4 / 6 / 5; /* div4 chiếm cột 4 */
+  background-color: #fff;
+  border-left: 1px solid #ddd;
+}
 
 .no-chat-selected,
 .no-content-selected {
@@ -265,44 +269,6 @@ body {
   border: none;
   border-radius: 5px;
   cursor: pointer;
-}
-
-/* ConversationInfo (div4) */
-.conversation-info {
-  padding: 20px;
-  background-color: #fff;
-  border-left: 1px solid #ddd;
-  height: 100%;
-  overflow-y: auto;
-}
-
-.info-header {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.info-avatar {
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  margin-bottom: 10px;
-}
-
-.info-section {
-  margin-bottom: 20px;
-}
-
-.info-section h4 {
-  margin: 0 0 10px;
-  font-size: 1rem;
-}
-
-.info-section p {
-  margin: 5px 0;
-  color: #666;
-  font-size: 0.9rem;
 }
 
 /* Container cho các button trong header */

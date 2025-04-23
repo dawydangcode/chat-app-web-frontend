@@ -2,7 +2,10 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import '../../assets/styles/ConversationInfo.css';
 import { FaUsers, FaImages, FaFileAlt, FaLink, FaLock, FaClipboard } from 'react-icons/fa';
-const ConversationInfo = ({ chat, onShowMembers }) => {
+import { BiSolidRightArrow, BiSolidDownArrow } from "react-icons/bi";
+import { RiGroupLine } from "react-icons/ri";
+
+const GroupConversationInfo = ({ chat }) => {
   const [isEditGroupNameModalOpen, setIsEditGroupNameModalOpen] = useState(false);
   const [isGroupInfoModalOpen, setIsGroupInfoModalOpen] = useState(false);
   const [isDeleteChatModalOpen, setIsDeleteChatModalOpen] = useState(false);
@@ -12,19 +15,17 @@ const ConversationInfo = ({ chat, onShowMembers }) => {
   const [files, setFiles] = useState([]);
   const [members, setMembers] = useState([]);
   const [isMembersPage, setIsMembersPage] = useState(false);
-  // Trạng thái mở rộng/thu gọn cho từng section
   const [expandedSections, setExpandedSections] = useState({
-    members: false,
-    media: false,
-    files: false,
-    links: false,
-    security: false,
+    members: true,
+    media: true,
+    files: true,
+    links: true,
+    security: true,
+    board: true,
   });
 
-  const currentUserId = JSON.parse(localStorage.getItem('user') || '{}')?.userId;
   const token = localStorage.getItem('token');
 
-  // Hàm toggle mở rộng/thu gọn section
   const toggleSection = (section) => {
     setExpandedSections((prev) => ({
       ...prev,
@@ -32,7 +33,6 @@ const ConversationInfo = ({ chat, onShowMembers }) => {
     }));
   };
 
-  // Lấy danh sách thành viên nhóm
   const fetchGroupMembers = async () => {
     if (!chat?.isGroup) return;
     try {
@@ -40,7 +40,7 @@ const ConversationInfo = ({ chat, onShowMembers }) => {
         headers: { Authorization: `Bearer ${token.trim()}` },
       });
       if (response.data.success) {
-        setMembers(response.data.data.members || []); // Lấy danh sách members từ data
+        setMembers(response.data.data.members || []);
       }
     } catch (error) {
       console.error('Error fetching group members:', error);
@@ -48,7 +48,6 @@ const ConversationInfo = ({ chat, onShowMembers }) => {
     }
   };
 
-  // Lấy danh sách ảnh, video và file từ tin nhắn nhóm
   const fetchGroupMessages = async () => {
     if (!chat?.isGroup) return;
     try {
@@ -57,24 +56,30 @@ const ConversationInfo = ({ chat, onShowMembers }) => {
       });
       if (response.data.success) {
         const messages = response.data.data.messages || [];
-        // Lọc ảnh và video
+        // Sắp xếp messages theo thời gian (mới nhất trước)
+        messages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+        // Lấy media files
         const media = messages
           .filter((msg) => ['image', 'video'].includes(msg.type))
           .map((msg) => ({
             type: msg.type,
             url: msg.mediaUrl,
             fileName: msg.fileName,
+            timestamp: msg.timestamp, // Thêm timestamp để sắp xếp
           }));
-        setMediaFiles(media);
 
-        // Lọc file (pdf, zip, v.v.)
+        // Lấy files khác
         const otherFiles = messages
           .filter((msg) => ['pdf', 'zip', 'file'].includes(msg.type))
           .map((msg) => ({
             type: msg.type,
             url: msg.mediaUrl,
             fileName: msg.fileName,
+            timestamp: msg.timestamp,
           }));
+
+        setMediaFiles(media);
         setFiles(otherFiles);
       }
     } catch (error) {
@@ -144,6 +149,10 @@ const ConversationInfo = ({ chat, onShowMembers }) => {
     alert('Chức năng thêm thành viên sẽ được triển khai sau!');
   };
 
+  const handleViewAllMedia = () => {
+    alert('Chức năng xem tất cả sẽ được triển khai sau!');
+  };
+
   if (isMembersPage) {
     return (
       <div className="members-page">
@@ -179,6 +188,9 @@ const ConversationInfo = ({ chat, onShowMembers }) => {
     );
   }
 
+  // Lấy 6 media mới nhất
+  const recentMediaFiles = mediaFiles.slice(0, 6);
+
   return (
     <div className="conversation-info">
       <div className="chat-info-header">
@@ -202,21 +214,21 @@ const ConversationInfo = ({ chat, onShowMembers }) => {
       {/* Section: Thành viên nhóm */}
       <div className="info-section">
         <h4 onClick={() => toggleSection('members')} className="section-title">
-          Thành viên nhóm {expandedSections.members ? '▲' : '▼'}
+          Thành viên nhóm {expandedSections.members ? <BiSolidDownArrow size={13} color='#5a6981'/>  :   <BiSolidRightArrow size={13} color='#5a6981'/> }
         </h4>
         {expandedSections.members && (
           <div className="section-content">
-            <p onClick={handleShowMembers} className="clickable">
-              {members.length} thành viên
-            </p>
+            <div onClick={handleShowMembers} className="clickable">
+            <RiGroupLine size={21}/> {members.length} thành viên
             </div>
+          </div>
         )}
       </div>
 
       {/* Section: Bảng tin nhóm */}
       <div className="info-section">
         <h4 onClick={() => toggleSection('board')} className="section-title">
-          Bảng tin nhóm {expandedSections.board ? '▲' : '▼'}
+          Bảng tin nhóm {expandedSections.board ? <BiSolidDownArrow size={13} color='#5a6981'/>  :   <BiSolidRightArrow size={13} color='#5a6981'/> }
         </h4>
         {expandedSections.board && (
           <div className="section-content">
@@ -228,22 +240,29 @@ const ConversationInfo = ({ chat, onShowMembers }) => {
       {/* Section: Ảnh/Video */}
       <div className="info-section">
         <h4 onClick={() => toggleSection('media')} className="section-title">
-          Ảnh/Video {expandedSections.media ? '▲' : '▼'}
+          Ảnh/Video {expandedSections.media ? <BiSolidDownArrow size={13} color='#5a6981'/>  :   <BiSolidRightArrow size={13} color='#5a6981'/> }
         </h4>
         {expandedSections.media && (
           <div className="section-content">
-            {mediaFiles.length > 0 ? (
-              <div className="media-grid">
-                {mediaFiles.map((media, index) => (
-                  <div key={index} className="media-item">
-                    {media.type === 'image' ? (
-                      <img src={media.url} alt={media.fileName} />
-                    ) : (
-                      <video src={media.url} controls />
-                    )}
-                  </div>
-                ))}
-              </div>
+            {recentMediaFiles.length > 0 ? (
+              <>
+                <div className="media-grid">
+                  {recentMediaFiles.map((media, index) => (
+                    <div key={index} className="media-item">
+                      {media.type === 'image' ? (
+                        <img src={media.url} alt={media.fileName} />
+                      ) : (
+                        <video src={media.url} controls />
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {mediaFiles.length > 6 && (
+                  <button className="view-all-btn" onClick={handleViewAllMedia}>
+                    Xem tất cả
+                  </button>
+                )}
+              </>
             ) : (
               <p>Chưa có Ảnh/Video được chia sẻ</p>
             )}
@@ -254,7 +273,7 @@ const ConversationInfo = ({ chat, onShowMembers }) => {
       {/* Section: File */}
       <div className="info-section">
         <h4 onClick={() => toggleSection('files')} className="section-title">
-          File {expandedSections.files ? '▲' : '▼'}
+          File {expandedSections.files ? <BiSolidDownArrow size={13} color='#5a6981'/>  :   <BiSolidRightArrow size={13} color='#5a6981'/> }
         </h4>
         {expandedSections.files && (
           <div className="section-content">
@@ -278,7 +297,7 @@ const ConversationInfo = ({ chat, onShowMembers }) => {
       {/* Section: Link */}
       <div className="info-section">
         <h4 onClick={() => toggleSection('links')} className="section-title">
-          Link {expandedSections.links ? '▲' : '▼'}
+          Link {expandedSections.links ? <BiSolidDownArrow size={13} color='#5a6981'/>  :   <BiSolidRightArrow size={13} color='#5a6981'/> }
         </h4>
         {expandedSections.links && (
           <div className="section-content">
@@ -290,7 +309,7 @@ const ConversationInfo = ({ chat, onShowMembers }) => {
       {/* Section: Thiết lập bảo mật */}
       <div className="info-section">
         <h4 onClick={() => toggleSection('security')} className="section-title">
-          Thiết lập bảo mật {expandedSections.security ? '▲' : '▼'}
+          Thiết lập bảo mật {expandedSections.security ? <BiSolidDownArrow size={13} color='#5a6981'/>  :   <BiSolidRightArrow size={13} color='#5a6981'/> }
         </h4>
         {expandedSections.security && (
           <div className="section-content">
@@ -424,4 +443,4 @@ const ConversationInfo = ({ chat, onShowMembers }) => {
   );
 };
 
-export default ConversationInfo;
+export default GroupConversationInfo;

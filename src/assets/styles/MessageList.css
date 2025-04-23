@@ -1,8 +1,11 @@
 .message-list {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 10px;
   font-family: SegoeuiPc, Segoe UI, San Francisco, Helvetica Neue, Helvetica, Lucida Grande, Roboto, Ubuntu, Tahoma, Microsoft Sans Serif, Arial, sans-serif;
+  display: block; /* Đảm bảo message-list không phải là flex container */
+  width: 100%; /* Đảm bảo chiều rộng đầy đủ */
 }
 
 .message {
@@ -12,6 +15,9 @@
   max-width: 70%;
   display: flex;
   position: relative;
+  box-sizing: border-box;
+
+  overflow: hidden; /* Cắt bỏ phần vượt ra ngoài */
 }
 
 .message-left {
@@ -20,6 +26,7 @@
 
 .message-right {
   justify-content: flex-end;
+  margin-left: auto; /* Thay vì margin-left: 300px */
 }
 
 .message-sender-info {
@@ -29,7 +36,7 @@
   margin-right: 10px;
 }
 
-.message-s Send-info-placeholder {
+.message-sender-info-placeholder {
   width: 40px;
   margin-right: 10px;
 }
@@ -53,18 +60,21 @@
 }
 
 .message-content {
-  max-width: 60%;
+  max-width: 100%;
   padding: 10px;
   border-radius: 10px;
   position: relative;
 }
 
 .message-left .message-content {
+  display: flex;
   background-color: #ffffff;
   color: #081b3a;
   font-size: .9375rem;
   font-weight: 400;
   line-height: 1.5;
+  width: 100%; /* Đổi từ width: auto thành width: 100% để giới hạn */
+  box-sizing: border-box;
 }
 
 .message-right .message-content {
@@ -161,18 +171,71 @@
   background-color: #e5e7eb;
 }
 
+.media-message-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  max-width: 309px; /* 3 ảnh x (100px + 3px gap) */
+}
+
 .media-message-container {
-  max-width: 200px;
-  margin-bottom: 5px;
+  flex: 0 0 auto;
 }
 
 .media-message-container img,
 .media-message-container video {
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+/* Điều chỉnh kích thước ảnh dựa trên số lượng ảnh trong nhóm */
+.media-message-group:has(> :nth-child(1):last-child) .media-message-container img {
+  width: 200px;
+  height: 200px;
+}
+
+.media-message-group:has(> :nth-child(2):last-child) .media-message-container img {
+  width: 150px;
+  height: 150px;
+}
+
+.media-message-group:has(> :nth-child(3):last-child) .media-message-container img {
+  width: 120px;
+  height: 120px;
+}
+
+/* Trường hợp 4 ảnh: 1 dòng 4 ảnh */
+.media-message-group:has(> :nth-child(4):last-child) .media-message-container img {
+  width: 75px;
+  height: 75px;
+}
+
+/* Trường hợp 5 ảnh: Dòng đầu 3 ảnh, dòng sau 2 ảnh */
+.media-message-group:has(> :nth-child(5):last-child) .media-message-container:nth-child(-n+3) img {
+  width: 100px;
+  height: 100px;
+}
+
+.media-message-group:has(> :nth-child(5):last-child) .media-message-container:nth-child(n+4) {
+  flex-grow: 1;
+}
+
+.media-message-group:has(> :nth-child(5):last-child) .media-message-container:nth-child(n+4) img {
+  width: 150px; /* Chia đều không gian cho 2 ảnh */
+  height: 150px;
+}
+
+/* Trường hợp 6 ảnh trở lên: 2 dòng 3:3 */
+.media-message-group:has(> :nth-child(6)) .media-message-container img {
+  width: 100px;
+  height: 100px;
+}
+
+/* Video giữ kích thước mặc định */
+.media-message-container video {
   width: 100%;
   height: auto;
-  border-radius: 8px;
   max-height: 200px;
-  object-fit: cover;
 }
 
 .media-container {

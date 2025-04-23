@@ -45,31 +45,77 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
     return <div>Đã xảy ra lỗi khi tải tin nhắn. Vui lòng thử lại.</div>;
   }
 
+  // Nhóm các tin nhắn ảnh liên tiếp của cùng một người gửi
+  const groupedMessages = [];
+  let currentGroup = [];
   let lastSenderId = null;
+  let lastTimestamp = null;
+
+  messages.forEach((message, index) => {
+    const isCurrentUser = message.senderId === currentUserId;
+    const nextMessage = messages[index + 1];
+    const isSameSenderAsPrevious = lastSenderId === message.senderId;
+    const isMediaMessage = (message.type === 'image' || message.type === 'video') && message.mediaUrl;
+    const isImageMessage = message.type === 'image' && message.mediaUrl;
+
+    // Tính khoảng cách thời gian giữa tin nhắn hiện tại và tin nhắn trước đó
+    const currentTimestamp = new Date(message.timestamp).getTime();
+    const timeDifference = lastTimestamp ? (currentTimestamp - lastTimestamp) / 1000 : Infinity; // Chuyển sang giây
+    const timeThreshold = 15; // Ngưỡng 1 phút (60 giây)
+
+    // Nếu tin nhắn là ảnh, cùng người gửi, và khoảng cách thời gian nhỏ hơn ngưỡng
+    if (isImageMessage && isSameSenderAsPrevious && timeDifference <= timeThreshold) {
+      currentGroup.push(message);
+    } else {
+      // Nếu không phải ảnh, không cùng người gửi, hoặc vượt ngưỡng thời gian, đóng nhóm hiện tại (nếu có)
+      if (currentGroup.length > 0) {
+        groupedMessages.push({ type: 'image-group', messages: currentGroup, senderId: lastSenderId });
+        currentGroup = [];
+      }
+      // Nếu tin nhắn hiện tại là ảnh, bắt đầu nhóm mới
+      if (isImageMessage) {
+        currentGroup.push(message);
+      } else {
+        // Nếu không phải ảnh, thêm tin nhắn riêng lẻ
+        groupedMessages.push(message);
+      }
+    }
+
+    // Nếu đây là tin nhắn cuối cùng, đóng nhóm (nếu có)
+    if (index === messages.length - 1 && currentGroup.length > 0) {
+      groupedMessages.push({ type: 'image-group', messages: currentGroup, senderId: lastSenderId });
+    }
+
+    lastSenderId = message.senderId;
+    lastTimestamp = currentTimestamp;
+  });
 
   return (
     <div className="message-list">
-      {messages.map((message, index) => {
-        const isCurrentUser = message.senderId === currentUserId;
-        const isSameSenderAsPrevious = lastSenderId === message.senderId;
-        const nextMessage = messages[index + 1];
-        const isSameSenderAsNext = nextMessage && nextMessage.senderId === message.senderId;
-        const showTime = !isSameSenderAsNext || index === messages.length - 1;
-        const showAvatarAndName = !isCurrentUser && (!isSameSenderAsPrevious || index === 0);
-        const isMediaMessage = (message.type === 'image' || message.type === 'video') && message.mediaUrl;
-        lastSenderId = message.senderId;
+      {groupedMessages.map((group, groupIndex) => {
+        const isGroupMessage = group.type === 'image-group';
+        const groupMessages = isGroupMessage ? group.messages : [group];
+        const firstMessage = groupMessages[0];
+        const lastMessage = groupMessages[groupMessages.length - 1];
+        const isCurrentUser = firstMessage.senderId === currentUserId;
+        const prevGroup = groupedMessages[groupIndex - 1];
+        const nextGroup = groupedMessages[groupIndex + 1];
+        const isSameSenderAsPrevious = prevGroup && (prevGroup.senderId === firstMessage.senderId || (prevGroup.type === 'image-group' && prevGroup.senderId === firstMessage.senderId));
+        const isSameSenderAsNext = nextGroup && (nextGroup.senderId === lastMessage.senderId || (nextGroup.type === 'image-group' && nextGroup.senderId === lastMessage.senderId));
+        const showTime = !isSameSenderAsNext || groupIndex === groupedMessages.length - 1;
+        const showAvatarAndName = !isCurrentUser && (!isSameSenderAsPrevious || groupIndex === 0);
 
         return (
           <div
-            key={message.id || message.messageId}
-            className={`message ${isCurrentUser ? 'message-right' : 'message-left'} ${isMediaMessage ? 'media-message' : ''}`}
+            key={groupIndex}
+            className={`message ${isCurrentUser ? 'message-right' : 'message-left'} ${isGroupMessage ? 'media-message' : ''}`}
           >
             {showAvatarAndName && (
               <div className="message-sender-info">
                 <img
                   src={
                     chat?.isGroup
-                      ? message.sender?.avatar || '/assets/images/placeholder.png'
+                      ? firstMessage.sender?.avatar || '/assets/images/placeholder.png'
                       : chat?.avatar || '/assets/images/placeholder.png'
                   }
                   alt="Sender Avatar"
@@ -82,108 +128,115 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
             )}
 
             <div className="message-content-wrapper">
-              {message.status === 'recalled' ? (
+              {firstMessage.status === 'recalled' ? (
                 <div className="message-content">
                   <p>(Tin nhắn đã thu hồi)</p>
                 </div>
               ) : (
                 <>
-                  {chat?.isGroup && showAvatarAndName && isMediaMessage && (
+                  {chat?.isGroup && showAvatarAndName && isGroupMessage && (
                     <span className="message-sender-name">
-                      {message.sender?.name || 'Không có tên'}
+                      {firstMessage.sender?.name || 'Không có tên'}
                     </span>
                   )}
-                  {isMediaMessage ? (
-                    <div className="media-message-container">
-                      {message.mimeType?.startsWith('image/') || message.type === 'image' ? (
-                        mediaLoadError === (message.id || message.messageId) ? (
-                          <div className="media-error">
-                            <p>Không thể tải hình ảnh: {message.fileName || 'Image'}</p>
-                            <a href={message.mediaUrl} target="_blank" rel="noopener noreferrer">
-                              Tải xuống
-                            </a>
-                          </div>
-                        ) : (
-                          <img
-                            src={message.mediaUrl}
-                            alt={message.fileName || 'Image'}
-                            onClick={() => handleMediaClick(message.mediaUrl, message.mimeType)}
-                            onError={() => handleMediaError(message.id || message.messageId)}
-                            style={{ cursor: 'pointer' }}
-                          />
-                        )
-                      ) : message.mimeType?.startsWith('video/') || message.type === 'video' ? (
-                        <video
-                          controls
-                          onClick={() => handleMediaClick(message.mediaUrl, message.mimeType)}
-                          onError={() => handleMediaError(message.id || message.messageId)}
-                          style={{ cursor: 'pointer' }}
-                        >
-                          <source src={message.mediaUrl} type={message.mimeType} />
-                          Trình duyệt của bạn không hỗ trợ video.
-                        </video>
-                      ) : null}
+                  {isGroupMessage ? (
+                    // Nhóm ảnh
+                    <div className="media-message-group">
+                      {groupMessages.map((message, idx) => (
+                        <div key={message.id || message.messageId} className="media-message-container">
+                          {mediaLoadError === (message.id || message.messageId) ? (
+                            <div className="media-error">
+                              <p>Không thể tải hình ảnh: {message.fileName || 'Image'}</p>
+                              <a href={message.mediaUrl} target="_blank" rel="noopener noreferrer">
+                                Tải xuống
+                              </a>
+                            </div>
+                          ) : (
+                            <img
+                              src={message.mediaUrl}
+                              alt={message.fileName || 'Image'}
+                              onClick={() => handleMediaClick(message.mediaUrl, message.mimeType)}
+                              onError={() => handleMediaError(message.id || message.messageId)}
+                              style={{ cursor: 'pointer' }}
+                            />
+                          )}
+                        </div>
+                      ))}
                     </div>
                   ) : (
+                    // Tin nhắn không phải ảnh hoặc video
                     <div className="message-content">
-                      {chat?.isGroup && showAvatarAndName && !isMediaMessage && (
+                      {chat?.isGroup && showAvatarAndName && !isGroupMessage && (
                         <span className="message-sender-name-inline">
-                          {message.sender?.name || 'Không có tên'}
+                          {firstMessage.sender?.name || 'Không có tên'}
                         </span>
                       )}
-                      {message.type === 'text' && <p>{message.content}</p>}
-                      {(message.type === 'file' || message.type === 'pdf' || message.type === 'zip') && message.mediaUrl ? (
+                      {firstMessage.type === 'text' && <p>{firstMessage.content}</p>}
+                      {(firstMessage.type === 'video') && firstMessage.mediaUrl ? (
+                        <div className="media-message-container">
+                          <video
+                            controls
+                            onClick={() => handleMediaClick(firstMessage.mediaUrl, firstMessage.mimeType)}
+                            onError={() => handleMediaError(firstMessage.id || firstMessage.messageId)}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <source src={firstMessage.mediaUrl} type={firstMessage.mimeType} />
+                            Trình duyệt của bạn không hỗ trợ video.
+                          </video>
+                        </div>
+                      ) : null}
+                      {(firstMessage.type === 'file' || firstMessage.type === 'pdf' || firstMessage.type === 'zip') && firstMessage.mediaUrl ? (
                         <div className="media-container">
-                          <a href={message.mediaUrl} target="_blank" rel="noopener noreferrer">
-                            {message.fileName || 'File'}
+                          <a href={firstMessage.mediaUrl} target="_blank" rel="noopener noreferrer">
+                            {firstMessage.fileName || 'File'}
                           </a>
                         </div>
                       ) : (
-                        message.type !== 'text' && !message.mediaUrl && (
-                          <p>Không thể hiển thị file: {message.fileName || 'Unknown'}</p>
+                        firstMessage.type !== 'text' && !firstMessage.mediaUrl && (
+                          <p>Không thể hiển thị file: {firstMessage.fileName || 'Unknown'}</p>
                         )
                       )}
-                      {message.status === 'error' && message.errorMessage && (
-                        <p className="error-message">{message.errorMessage}</p>
+                      {firstMessage.status === 'error' && firstMessage.errorMessage && (
+                        <p className="error-message">{firstMessage.errorMessage}</p>
                       )}
                     </div>
                   )}
                   <div className="message-meta">
                     {showTime && (
                       <span className="message-time">
-                        {new Date(message.timestamp).toLocaleTimeString([], {
+                        {new Date(lastMessage.timestamp).toLocaleTimeString([], {
                           hour: '2-digit',
                           minute: '2-digit',
                         })}
                       </span>
                     )}
                     {isCurrentUser && (
-                      <span className={`message-status ${message.status}`}>
-                        {message.status === 'pending' && 'Đang gửi...'}
-                        {message.status === 'sent' && '✓'}
-                        {message.status === 'delivered' && '✓✓'}
-                        {message.status === 'seen' && 'Đã xem'}
-                        {message.status === 'error' && 'Lỗi'}
+                      <span className={`message-status ${lastMessage.status}`}>
+                        {lastMessage.status === 'pending' && 'Đang gửi...'}
+                        {lastMessage.status === 'sent' && '✓'}
+                        {lastMessage.status === 'delivered' && '✓✓'}
+                        {lastMessage.status === 'seen' && 'Đã xem'}
+                        {lastMessage.status === 'error' && 'Lỗi'}
                       </span>
                     )}
                   </div>
                 </>
               )}
               <div className="message-actions">
-                {isCurrentUser && message.status !== 'recalled' && (
-                  <button onClick={() => onRecallMessage(message.id || message.messageId)}>
+                {isCurrentUser && lastMessage.status !== 'recalled' && (
+                  <button onClick={() => onRecallMessage(lastMessage.id || lastMessage.messageId)}>
                     <FaUndo />
                   </button>
                 )}
-                <button onClick={() => handleDeleteClick(message.id || message.messageId)}>
+                <button onClick={() => handleDeleteClick(lastMessage.id || lastMessage.messageId)}>
                   <FaTrash />
                 </button>
-                {message.status !== 'recalled' && (
+                {lastMessage.status !== 'recalled' && (
                   <button
                     onClick={() => {
                       const targetUserId = prompt('Nhập ID người nhận để chuyển tiếp:');
                       if (targetUserId) {
-                        onForwardMessage(message.id || message.messageId, targetUserId);
+                        onForwardMessage(lastMessage.id || lastMessage.messageId, targetUserId);
                       }
                     }}
                   >

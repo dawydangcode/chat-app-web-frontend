@@ -4,10 +4,11 @@ import SidebarHeader from '../components/Chat/SidebarHeader';
 import ChatListHeader from '../components/Chat/ChatListHeader';
 import MessagesTab from '../components/Chat/MessageTab';
 import ChatWindow from '../components/Chat/ChatWindow';
-import ConversationInfo from '../components/Chat/ConversationInfo';
+import IndividualConversationInfo from '../components/Chat/IndividualConversationInfo'; // Thêm import
+import GroupConversationInfo from '../components/Chat/GroupConversationInfo'; // Thêm import
 import SettingsTab from '../components/SettingTab';
 import ContactsTab from '../components/ContactsTab';
-import CreateGroupModal from '../components/CreateGroupModal'; // Import modal
+import CreateGroupModal from '../components/CreateGroupModal';
 import '../assets/styles/ChatPage.css';
 
 const ChatPage = () => {
@@ -27,8 +28,8 @@ const ChatPage = () => {
   const [sentFriendRequests, setSentFriendRequests] = useState([]);
   const [friends, setFriends] = useState([]);
   const [isAddFriendModalOpen, setIsAddFriendModalOpen] = useState(false);
-  const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false); // State cho modal
-  const [groups, setGroups] = useState([]); // State cho danh sách nhóm
+  const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
+  const [groups, setGroups] = useState([]);
 
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const currentUserId = currentUser?.userId;
@@ -54,7 +55,6 @@ const ChatPage = () => {
           senderId: request.senderId,
           message: request.message || 'Không có lời nhắn',
         }));
-
         setFriendRequests(formattedRequests);
       } else {
         setFriendRequests([]);
@@ -91,7 +91,6 @@ const ChatPage = () => {
           receiverId: request.userId,
           message: request.message || 'Không có lời nhắn',
         }));
-
         setSentFriendRequests(formattedRequests);
       } else {
         setSentFriendRequests([]);
@@ -536,67 +535,69 @@ const ChatPage = () => {
               )}
               {activeSection === 'friendRequests' && (
                 <div className="friend-requests">
-                  <div className="received-requests">
-                    <h4>Lời mời đã nhận ({friendRequests.length})</h4>
-                    {friendRequests.length > 0 ? (
-                      friendRequests.map((request) => (
-                        <div key={request.id} className="friend-request-item">
-                          <img
-                            src={request.avatar}
-                            alt="Avatar"
-                            className="friend-request-avatar"
-                          />
-                          <div className="friend-request-info">
-                            <p className="friend-request-name">{request.name}</p>
-                            <p className="friend-request-message">{request.message}</p>
-                            <div className="friend-request-actions">
-                              <button
-                                className="decline-btn"
-                                onClick={() => handleDeclineRequest(request.id)}
-                              >
-                                Từ chối
-                              </button>
-                              <button
-                                className="accept-btn"
-                                onClick={() => handleAcceptRequest(request.id)}
-                              >
-                                Đồng ý
-                              </button>
+                  <div>
+                    <div className="received-requests">
+                      <h4>Lời mời đã nhận ({friendRequests.length})</h4>
+                      {friendRequests.length > 0 ? (
+                        friendRequests.map((request) => (
+                          <div key={request.id} className="friend-request-item">
+                            <img
+                              src={request.avatar}
+                              alt="Avatar"
+                              className="friend-request-avatar"
+                            />
+                            <div className="friend-request-info">
+                              <p className="friend-request-name">{request.name}</p>
+                              <p className="friend-request-message">{request.message}</p>
+                              <div className="friend-request-actions">
+                                <button
+                                  className="decline-btn"
+                                  onClick={() => handleDeclineRequest(request.id)}
+                                >
+                                  Từ chối
+                                </button>
+                                <button
+                                  className="accept-btn"
+                                  onClick={() => handleAcceptRequest(request.id)}
+                                >
+                                  Đồng ý
+                                </button>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))
-                    ) : (
-                      <p>Không có lời mời kết bạn.</p>
-                    )}
-                  </div>
-                  <div className="sent-requests">
-                    <h4>Lời mời đã gửi ({sentFriendRequests.length})</h4>
-                    {sentFriendRequests.length > 0 ? (
-                      sentFriendRequests.map((request) => (
-                        <div key={request.id} className="friend-request-item">
-                          <img
-                            src={request.avatar}
-                            alt="Avatar"
-                            className="friend-request-avatar"
-                          />
-                          <div className="friend-request-info">
-                            <p className="friend-request-name">{request.name}</p>
-                            <p className="friend-request-message">{request.message}</p>
-                            <div className="friend-request-actions">
-                              <button
-                                className="cancel-btn"
-                                onClick={() => handleCancelRequest(request.id)}
-                              >
-                                Thu hồi
-                              </button>
+                        ))
+                      ) : (
+                        <p>Không có lời mời kết bạn.</p>
+                      )}
+                    </div>
+                    <div className="sent-requests">
+                      <h4>Lời mời đã gửi ({sentFriendRequests.length})</h4>
+                      {sentFriendRequests.length > 0 ? (
+                        sentFriendRequests.map((request) => (
+                          <div key={request.id} className="friend-request-item">
+                            <img
+                              src={request.avatar}
+                              alt="Avatar"
+                              className="friend-request-avatar"
+                            />
+                            <div className="friend-request-info">
+                              <p className="friend-request-name">{request.name}</p>
+                              <p className="friend-request-message">{request.message}</p>
+                              <div className="friend-request-actions">
+                                <button
+                                  className="cancel-btn"
+                                  onClick={() => handleCancelRequest(request.id)}
+                                >
+                                  Thu hồi
+                                </button>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))
-                    ) : (
-                      <p>Không có lời mời đã gửi.</p>
-                    )}
+                        ))
+                      ) : (
+                        <p>Không có lời mời đã gửi.</p>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -608,11 +609,18 @@ const ChatPage = () => {
           </div>
         )}
       </div>
-      {isInfoVisible && activeTab === 'messages' && (
+
+      {/* Thêm div4 để hiển thị ConversationInfo bên phải div3 */}
+      {isInfoVisible && activeTab === 'messages' && selectedChat && (
         <div className="div4">
-          {selectedChat && <ConversationInfo chat={selectedChat} />}
+          {selectedChat.isGroup ? (
+            <GroupConversationInfo chat={selectedChat} />
+          ) : (
+            <IndividualConversationInfo chat={selectedChat} />
+          )}
         </div>
       )}
+
       <CreateGroupModal
         isOpen={isCreateGroupModalOpen}
         onClose={() => setIsCreateGroupModalOpen(false)}
