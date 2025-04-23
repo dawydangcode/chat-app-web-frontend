@@ -13,7 +13,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const currentUserId = currentUser?.userId;
 
-  // Lấy trạng thái kết bạn
+  // Lấy trạng thái kết bạn (chỉ gọi nếu không phải nhóm chat)
   const fetchFriendStatus = async () => {
     if (!currentUserId || !chat?.targetUserId) return;
 
@@ -51,10 +51,15 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       }
 
       try {
-        const response = await axios.get(
-          `http://localhost:3000/api/messages/user/${chat.targetUserId}`,
-          { headers: { Authorization: `Bearer ${token.trim()}` } }
-        );
+        // Nếu là nhóm chat, gọi API lấy tin nhắn nhóm
+        const endpoint = chat.isGroup
+          ? `http://localhost:3000/api/messages/group/${chat.targetUserId}`
+          : `http://localhost:3000/api/messages/user/${chat.targetUserId}`;
+
+        const response = await axios.get(endpoint, {
+          headers: { Authorization: `Bearer ${token.trim()}` },
+        });
+
         if (response.data.success) {
           setMessages(response.data.messages || []);
         }
@@ -93,7 +98,13 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
 
     fetchMessages();
     fetchRecentChats();
-    fetchFriendStatus(); // Gọi hàm lấy trạng thái kết bạn
+
+    // Chỉ lấy trạng thái kết bạn nếu không phải nhóm chat
+    if (!chat?.isGroup) {
+      fetchFriendStatus();
+    } else {
+      setFriendStatus(null); // Đặt friendStatus về null nếu là nhóm chat
+    }
   }, [chat, navigate, currentUserId]);
 
   const handleSendMessage = async (data) => {
@@ -122,7 +133,11 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         timestamp: new Date().toISOString(),
         status: 'pending',
       };
-      data.append('receiverId', chat.targetUserId);
+      if (chat.isGroup) {
+        data.append('groupId', chat.targetUserId);
+      } else {
+        data.append('receiverId', chat.targetUserId);
+      }
       data.append('metadata', JSON.stringify({ systemMessage: false }));
     } else {
       newMessage = {
@@ -134,7 +149,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         status: 'pending',
       };
       data = {
-        receiverId: chat.targetUserId,
+        ...(chat.isGroup ? { groupId: chat.targetUserId } : { receiverId: chat.targetUserId }),
         type: data.type,
         content: data.content,
         metadata: JSON.stringify({ systemMessage: false }),
@@ -145,11 +160,11 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
     setMessages((prev) => [...prev, newMessage]);
 
     try {
-      const response = await axios.post(
-        'http://localhost:3000/api/messages/send',
-        data,
-        config
-      );
+      const endpoint = chat.isGroup
+        ? 'http://localhost:3000/api/messages/send-to-group'
+        : 'http://localhost:3000/api/messages/send';
+
+      const response = await axios.post(endpoint, data, config);
       if (response.data.success) {
         setMessages((prev) =>
           prev.map((msg) =>
@@ -283,18 +298,19 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         />
         <div className="chat-info">
           <h3>{chat?.name || 'Không có tên'}</h3>
-          <p>{chat?.phoneNumber ? `+${chat.phoneNumber}` : 'Chưa có số điện thoại'}</p>
+          <p>{chat?.phoneNumber && !chat.isGroup ? `+${chat.phoneNumber}` : chat.isGroup ? 'Nhóm chat' : 'Chưa có số điện thoại'}</p>
         </div>
         <button className="toggle-info-btn" onClick={toggleInfo}>
           {isInfoVisible ? 'Ẩn thông tin' : 'Hiện thông tin'}
         </button>
       </div>
-      {friendStatus && friendStatus !== 'friend' && (
+      {/* Chỉ hiển thị banner nếu không phải nhóm chat và có trạng thái kết bạn */}
+      {!chat?.isGroup && friendStatus && friendStatus !== 'friend' && (
         <div className="friend-status-banner">
           {friendStatus === 'stranger' && (
             <>
               <p>Gửi yêu cầu kết bạn tới người này</p>
-              <button className="add-friend-btn" onClick={handleAddFriendRequest}>
+              <button className="add-friend-btn-banner" onClick={handleAddFriendRequest}>
                 Gửi kết bạn
               </button>
             </>
@@ -305,7 +321,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
           {friendStatus === 'pending_received' && (
             <>
               <p>Đang chờ được đồng ý kết bạn</p>
-              <button className="accept-friend-btn" onClick={handleAcceptRequest}>
+              <button className="accept-friend-btn-banner" onClick={handleAcceptRequest}>
                 Đồng ý
               </button>
             </>

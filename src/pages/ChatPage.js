@@ -7,6 +7,7 @@ import ChatWindow from '../components/Chat/ChatWindow';
 import ConversationInfo from '../components/Chat/ConversationInfo';
 import SettingsTab from '../components/SettingTab';
 import ContactsTab from '../components/ContactsTab';
+import CreateGroupModal from '../components/CreateGroupModal'; // Import modal
 import '../assets/styles/ChatPage.css';
 
 const ChatPage = () => {
@@ -26,6 +27,8 @@ const ChatPage = () => {
   const [sentFriendRequests, setSentFriendRequests] = useState([]);
   const [friends, setFriends] = useState([]);
   const [isAddFriendModalOpen, setIsAddFriendModalOpen] = useState(false);
+  const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false); // State cho modal
+  const [groups, setGroups] = useState([]); // State cho danh sách nhóm
 
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const currentUserId = currentUser?.userId;
@@ -104,17 +107,16 @@ const ChatPage = () => {
     }
   };
 
-  // Hàm định dạng thời gian theo yêu cầu: "4/22/2025, 4:23:30 PM"
   const formatDateTime = (date) => {
     const d = new Date(date);
-    const month = d.getMonth() + 1; // Tháng từ 0-11, cần +1
+    const month = d.getMonth() + 1;
     const day = d.getDate();
     const year = d.getFullYear();
     const hours = d.getHours();
     const minutes = d.getMinutes();
     const seconds = d.getSeconds();
     const ampm = hours >= 12 ? 'PM' : 'AM';
-    const hours12 = hours % 12 || 12; // Chuyển sang định dạng 12 giờ
+    const hours12 = hours % 12 || 12;
     return `${month}/${day}/${year}, ${hours12}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')} ${ampm}`;
   };
 
@@ -126,13 +128,11 @@ const ChatPage = () => {
     }
 
     try {
-      // Lấy danh sách bạn bè từ API /api/friends/list
       const response = await axios.get('http://localhost:3000/api/friends/list', {
         headers: { Authorization: `Bearer ${token.trim()}` },
       });
 
       if (response.data && response.data.length > 0) {
-        // Gọi API /api/friends/profile/:targetUserId để lấy thông tin chi tiết cho từng bạn bè
         const friendsWithDetails = await Promise.all(
           response.data.map(async (friend) => {
             try {
@@ -142,15 +142,15 @@ const ChatPage = () => {
               );
               return {
                 friendId: friend.friendId,
-                name: profileResponse.data.name || friend.friendId, // Dùng friendId nếu không có tên
+                name: profileResponse.data.name || friend.friendId,
                 avatar: profileResponse.data.avatar || 'https://placehold.co/40x40',
-                addedAt: formatDateTime(friend.addedAt), // Định dạng thời gian theo yêu cầu
+                addedAt: formatDateTime(friend.addedAt),
               };
             } catch (error) {
               console.error(`Error fetching profile for friend ${friend.friendId}:`, error);
               return {
                 friendId: friend.friendId,
-                name: friend.friendId, // Fallback về friendId nếu lỗi
+                name: friend.friendId,
                 avatar: 'https://placehold.co/40x40',
                 addedAt: formatDateTime(friend.addedAt),
               };
@@ -164,6 +164,40 @@ const ChatPage = () => {
     } catch (error) {
       console.error('Error fetching friends:', error);
       setFriends([]);
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+      }
+    }
+  };
+
+  const fetchGroups = async () => {
+    const token = localStorage.getItem('token');
+    if (!token || !token.startsWith('eyJ')) {
+      window.location.href = '/login';
+      return;
+    }
+
+    try {
+      const response = await axios.get('http://localhost:3000/api/groups/listGroup', {
+        headers: { Authorization: `Bearer ${token.trim()}` },
+      });
+
+      if (response.data && response.data.success) {
+        const formattedGroups = response.data.data.map(group => ({
+          id: group.groupId,
+          name: group.name,
+          avatar: group.avatar || 'https://placehold.co/40x40',
+          createdAt: formatDateTime(group.createdAt),
+        }));
+        setGroups(formattedGroups);
+      } else {
+        setGroups([]);
+      }
+    } catch (error) {
+      console.error('Error fetching groups:', error);
+      setGroups([]);
       if (error.response?.status === 401) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -237,6 +271,7 @@ const ChatPage = () => {
     fetchFriendRequests();
     fetchSentFriendRequests();
     fetchFriends();
+    fetchGroups();
   }, [currentUserId]);
 
   const handleUserSearch = async (query) => {
@@ -256,7 +291,7 @@ const ChatPage = () => {
     try {
       const response = await axios.get(
         `http://localhost:3000/api/search/users/by-phone?phoneNumber=${encodeURIComponent(query)}`,
-        { headers: { Authorization: `Bearer ${token.trim()}` } }
+        { headers: { Authorization: `Bearer ${token.trim()}` } },
       );
 
       if (response.data && response.data.success && response.data.data && response.data.data.length > 0) {
@@ -292,7 +327,17 @@ const ChatPage = () => {
   };
 
   const handleCreateGroup = () => {
-    console.log('Tạo nhóm chat được nhấn');
+    setIsCreateGroupModalOpen(true);
+  };
+
+  const handleGroupCreated = (newGroup) => {
+    const formattedGroup = {
+      id: newGroup.groupId,
+      name: newGroup.name,
+      avatar: newGroup.avatar || 'https://placehold.co/40x40',
+      createdAt: formatDateTime(newGroup.createdAt),
+    };
+    setGroups([...groups, formattedGroup]);
   };
 
   const handleSelectChat = (chat) => {
@@ -309,7 +354,7 @@ const ChatPage = () => {
       const response = await axios.post(
         'http://localhost:3000/api/friends/accept',
         { requestId },
-        { headers: { Authorization: `Bearer ${token.trim()}` } }
+        { headers: { Authorization: `Bearer ${token.trim()}` } },
       );
 
       if (response.data && response.data.message) {
@@ -328,7 +373,7 @@ const ChatPage = () => {
       const response = await axios.post(
         'http://localhost:3000/api/friends/reject',
         { requestId },
-        { headers: { Authorization: `Bearer ${token.trim()}` } }
+        { headers: { Authorization: `Bearer ${token.trim()}` } },
       );
 
       if (response.data && response.data.message) {
@@ -346,7 +391,7 @@ const ChatPage = () => {
       const response = await axios.post(
         'http://localhost:3000/api/friends/cancel',
         { requestId },
-        { headers: { Authorization: `Bearer ${token.trim()}` } }
+        { headers: { Authorization: `Bearer ${token.trim()}` } },
       );
 
       if (response.data && response.data.message) {
@@ -470,7 +515,23 @@ const ChatPage = () => {
               )}
               {activeSection === 'groups' && (
                 <div className="groups-list">
-                  <p>Chưa có danh sách nhóm.</p>
+                  {groups.length > 0 ? (
+                    groups.map((group) => (
+                      <div key={group.id} className="group-item">
+                        <img
+                          src={group.avatar}
+                          alt="Avatar"
+                          className="group-avatar"
+                        />
+                        <div className="group-info">
+                          <p className="group-name">{group.name}</p>
+                          <p className="group-created-at">Tạo vào: {group.createdAt}</p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p>Chưa có danh sách nhóm.</p>
+                  )}
                 </div>
               )}
               {activeSection === 'friendRequests' && (
@@ -552,6 +613,11 @@ const ChatPage = () => {
           {selectedChat && <ConversationInfo chat={selectedChat} />}
         </div>
       )}
+      <CreateGroupModal
+        isOpen={isCreateGroupModalOpen}
+        onClose={() => setIsCreateGroupModalOpen(false)}
+        onGroupCreated={handleGroupCreated}
+      />
     </div>
   );
 };

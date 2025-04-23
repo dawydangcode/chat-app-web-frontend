@@ -3,7 +3,7 @@ import axios from 'axios';
 import UserSearch from './UserSearch';
 import { useNavigate } from 'react-router-dom';
 import '../../assets/styles/ChatPage.css';
-import { FaBellSlash, FaThumbtack } from 'react-icons/fa';
+import { FaBellSlash, FaThumbtack, FaUsers } from 'react-icons/fa'; // Thêm FaUsers để hiển thị biểu tượng nhóm
 
 const MessagesTab = ({
   onSelectChat,
@@ -30,7 +30,7 @@ const MessagesTab = ({
   const navigate = useNavigate();
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const currentUserId = currentUser?.userId;
-  const userName = currentUser?.name || 'Người dùng'; // Lấy userName từ localStorage
+  const userName = currentUser?.name || 'Người dùng';
 
   const fetchChats = async () => {
     if (!currentUserId) {
@@ -52,30 +52,53 @@ const MessagesTab = ({
       console.log('API /api/conversations/summary response:', response.data);
 
       if (response.data && response.data.success) {
-        const conversations = response.data.data?.conversations || [];
+        const { conversations = [], groups = [] } = response.data.data;
 
-        const formattedChats = conversations.map((conv) => {
-          console.log('Conversation avatar:', conv.avatar);
-          return {
-            id: conv.otherUserId,
-            name: conv.displayName || 'Không có tên',
-            phoneNumber: conv.phoneNumber || '',
-            avatar: conv.avatar || 'https://placehold.co/50x50',
-            lastMessage:
-              conv.lastMessage?.status === 'recalled'
-                ? '(Tin nhắn đã thu hồi)'
-                : conv.lastMessage?.content || 'Chưa có tin nhắn',
-            timestamp: conv.lastMessage?.timestamp || new Date().toISOString(),
-            isMuted: conv.isMuted || false,
-            isPinned: conv.isPinned || false,
-            targetUserId: conv.otherUserId,
-          };
+        // Xử lý hội thoại cá nhân
+        const formattedIndividualChats = conversations.map((conv) => ({
+          id: conv.otherUserId,
+          name: conv.displayName || 'Không có tên',
+          phoneNumber: conv.phoneNumber || '',
+          avatar: conv.avatar || 'https://placehold.co/50x50',
+          lastMessage:
+            conv.lastMessage?.status === 'recalled'
+              ? '(Tin nhắn đã thu hồi)'
+              : conv.lastMessage?.content || 'Chưa có tin nhắn',
+          timestamp: conv.lastMessage?.timestamp || new Date().toISOString(),
+          isMuted: conv.isMuted || false,
+          isPinned: conv.isPinned || false,
+          targetUserId: conv.otherUserId,
+          isGroup: false, // Đánh dấu đây là hội thoại cá nhân
+        }));
+
+        // Xử lý hội thoại nhóm
+        const formattedGroupChats = groups.map((group) => ({
+          id: group.groupId,
+          name: group.name || 'Nhóm không tên',
+          avatar: group.avatar || 'https://placehold.co/50x50',
+          lastMessage:
+            group.lastMessage?.isRecalled
+              ? '(Tin nhắn đã thu hồi)'
+              : group.lastMessage?.content || 'Chưa có tin nhắn',
+          timestamp: group.lastMessage?.timestamp || group.createdAt || new Date().toISOString(),
+          isMuted: false, // Hiện tại API không trả về isMuted cho nhóm, có thể thêm sau
+          isPinned: false, // Hiện tại API không trả về isPinned cho nhóm, có thể thêm sau
+          targetUserId: group.groupId, // Dùng groupId làm targetUserId để phù hợp với onSelectChat
+          isGroup: true, // Đánh dấu đây là hội thoại nhóm
+          memberCount: group.memberCount || 0, // Số thành viên trong nhóm
+        }));
+
+        // Kết hợp danh sách hội thoại cá nhân và nhóm, sắp xếp theo thời gian
+        const combinedChats = [...formattedIndividualChats, ...formattedGroupChats].sort((a, b) => {
+          if (a.isPinned && !b.isPinned) return -1;
+          if (!a.isPinned && b.isPinned) return 1;
+          return new Date(b.timestamp) - new Date(a.timestamp);
         });
 
-        setChats(formattedChats);
+        setChats(combinedChats);
       }
     } catch (error) {
-      console.error('Error fetching chats:', error);
+      console.error('Lỗi khi lấy danh sách hội thoại:', error);
       if (error.response?.status === 401) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -88,7 +111,6 @@ const MessagesTab = ({
     fetchChats();
   }, [navigate, currentUserId]);
 
-  // Đặt lời nhắn mặc định khi tìm thấy người dùng
   useEffect(() => {
     if (foundUser && friendStatus === 'stranger') {
       setFriendRequestMessage(
@@ -246,6 +268,7 @@ const MessagesTab = ({
                 <div className="chat-info">
                   <p className="chat-name">
                     {chat.name || 'Không có tên'}
+                    {chat.isGroup && <FaUsers className="group-icon" title="Nhóm chat" />}
                     {chat.isPinned && <FaThumbtack className="pinned-icon" />}
                     {chat.isMuted && <FaBellSlash className="muted-icon" />}
                   </p>
@@ -328,7 +351,7 @@ const MessagesTab = ({
                         value={friendRequestMessage}
                         onChange={(e) => setFriendRequestMessage(e.target.value)}
                         rows={3}
-                        maxLength={150} // Giới hạn 150 ký tự
+                        maxLength={150}
                       />
                       <p className="char-counter">
                         {friendRequestMessage.length}/150

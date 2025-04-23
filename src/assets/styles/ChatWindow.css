@@ -100,8 +100,8 @@
   color: #333;
 }
 
-.add-friend-btn,
-.accept-friend-btn {
+.add-friend-btn-banner,
+.accept-friend-btn-banner {
   padding: 5px 15px;
   border-radius: 5px;
   font-size: 0.9rem;

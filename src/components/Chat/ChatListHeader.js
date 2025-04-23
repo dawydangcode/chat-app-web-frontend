@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { FaSearch } from 'react-icons/fa';
 import { GoPersonAdd } from 'react-icons/go';
 import { AiOutlineUsergroupAdd } from 'react-icons/ai';
+import CreateGroupModal from '../CreateGroupModal';
 import '../../assets/styles/ChatPage.css';
 
 const ChatListHeader = ({
@@ -13,7 +14,10 @@ const ChatListHeader = ({
   handleAddFriend,
   handleCreateGroup,
   handleCloseSearch,
+  onGroupCreated, // Thêm prop để cập nhật danh sách nhóm
 }) => {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   return (
     <div className="chat-list-header">
       <div className="search-container">
@@ -35,11 +39,22 @@ const ChatListHeader = ({
           <button className="action-btn add-friend-btn" onClick={handleAddFriend} title="Thêm bạn">
             <GoPersonAdd />
           </button>
-          <button className="action-btn create-group-btn" onClick={handleCreateGroup} title="Tạo nhóm chat">
+          <button
+            className="action-btn create-group-btn"
+            onClick={() => setIsModalOpen(true)} // Mở modal
+            title="Tạo nhóm chat"
+          >
             <AiOutlineUsergroupAdd />
           </button>
         </div>
       )}
+
+      {/* Tích hợp modal */}
+      <CreateGroupModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onGroupCreated={onGroupCreated} // Truyền hàm để cập nhật nhóm
+      />
     </div>
   );
 };
