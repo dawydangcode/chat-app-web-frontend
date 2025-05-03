@@ -75,6 +75,7 @@
   line-height: 1.5;
   width: 100%; /* Đổi từ width: auto thành width: 100% để giới hạn */
   box-sizing: border-box;
+  
 }
 
 .message-right .message-content {

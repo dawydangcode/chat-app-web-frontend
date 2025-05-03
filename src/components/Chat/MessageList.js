@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import '../../assets/styles/ChatWindow.css';
 import '../../assets/styles/MessageList.css';
 import { FaUndo, FaTrash, FaShare } from 'react-icons/fa';
-import { getSocket } from '../../utils/socket';
 
 const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, onForwardMessage, chat }) => {
   const currentUserId = JSON.parse(localStorage.getItem('user') || '{}')?.userId;
@@ -10,29 +9,19 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
   const [messageToDelete, setMessageToDelete] = useState(null);
   const [fullscreenMedia, setFullscreenMedia] = useState(null);
   const [mediaLoadError, setMediaLoadError] = useState(null);
+  const messageListRef = useRef(null);
 
   useEffect(() => {
-    let socket;
-    try {
-      socket = getSocket('/chat');
-    } catch (error) {
-      console.error('Socket not initialized:', error.message);
-      return;
+    if (messageListRef.current) {
+      messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
     }
-
-    // Đánh dấu tin nhắn là seen khi người dùng xem
-    messages.forEach((message) => {
-      if (
-        message.senderId !== currentUserId &&
-        message.status !== 'seen' &&
-        message.status !== 'recalled'
-      ) {
-        socket.emit('markMessageAsSeen', { messageId: message.id || message.messageId });
-      }
-    });
-  }, [messages, currentUserId]);
+  }, [messages]);
 
   const handleDeleteClick = (messageId) => {
+    if (chat.isGroup) {
+      alert('Chức năng xóa tin nhắn nhóm hiện chưa được hỗ trợ.');
+      return;
+    }
     setMessageToDelete(messageId);
     setShowDeleteModal(true);
   };
@@ -67,7 +56,6 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
     return <div>Đã xảy ra lỗi khi tải tin nhắn. Vui lòng thử lại.</div>;
   }
 
-  // Nhóm các tin nhắn ảnh liên tiếp của cùng một người gửi
   const groupedMessages = [];
   let currentGroup = [];
   let lastSenderId = null;
@@ -107,7 +95,7 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
   });
 
   return (
-    <div className="message-list">
+    <div className="message-list" ref={messageListRef}>
       {groupedMessages.map((group, groupIndex) => {
         const isGroupMessage = group.type === 'image-group';
         const groupMessages = isGroupMessage ? group.messages : [group];
@@ -224,7 +212,7 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                         })}
                       </span>
                     )}
-                    {isCurrentUser && (
+                    {isCurrentUser && !chat.isGroup && (
                       <span className={`message-status ${lastMessage.status}`}>
                         {lastMessage.status === 'pending' && 'Đang gửi...'}
                         {lastMessage.status === 'sent' && '✓'}
@@ -242,9 +230,11 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                     <FaUndo />
                   </button>
                 )}
-                <button onClick={() => handleDeleteClick(lastMessage.id || lastMessage.messageId)}>
-                  <FaTrash />
-                </button>
+                {!chat.isGroup && (
+                  <button onClick={() => handleDeleteClick(lastMessage.id || lastMessage.messageId)}>
+                    <FaTrash />
+                  </button>
+                )}
                 {lastMessage.status !== 'recalled' && (
                   <button
                     onClick={() => {
