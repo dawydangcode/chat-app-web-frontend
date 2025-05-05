@@ -11,6 +11,7 @@ import { initializeSocket, getSocket } from '../../utils/socket';
 
 const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
   const [messages, setMessages] = useState([]);
+  const [messageCache, setMessageCache] = useState({}); // Cache để lưu trữ tin nhắn
   const [recentMessages, setRecentMessages] = useState([]);
   const [friendStatus, setFriendStatus] = useState(null);
   const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
@@ -26,6 +27,12 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
     }
 
     const fetchMessages = async () => {
+      // Kiểm tra cache trước khi gọi API
+      if (messageCache[chat.targetUserId]) {
+        setMessages(messageCache[chat.targetUserId]);
+        return;
+      }
+
       try {
         const endpoint = chat.isGroup
           ? `http://localhost:3000/api/groups/messages/${chat.targetUserId}`
@@ -37,8 +44,12 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
 
         if (response.data.success) {
           const fetchedMessages = chat.isGroup ? response.data.data.messages || [] : response.data.messages || [];
-          console.log('Fetched messages:', fetchedMessages);
           setMessages(fetchedMessages);
+          // Lưu tin nhắn vào cache
+          setMessageCache((prev) => ({
+            ...prev,
+            [chat.targetUserId]: fetchedMessages,
+          }));
         } else {
           setMessages([]);
         }
@@ -133,7 +144,13 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
                 index === existingMessageIndex ? { ...data.message, id: data.message.messageId } : msg
               );
             }
-            return [...prev, data.message];
+            const updatedMessages = [...prev, data.message];
+            // Cập nhật cache
+            setMessageCache((prevCache) => ({
+              ...prevCache,
+              [chat.targetUserId]: updatedMessages,
+            }));
+            return updatedMessages;
           });
         }
       });
@@ -142,11 +159,17 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         console.log('Group message recalled:', data);
         setMessages((prev) => {
           if (!Array.isArray(prev)) return prev;
-          return prev.map((msg) =>
+          const updatedMessages = prev.map((msg) =>
             (msg.id === data.messageId || msg.messageId === data.messageId)
               ? { ...msg, status: 'recalled' }
               : msg
           );
+          // Cập nhật cache
+          setMessageCache((prevCache) => ({
+            ...prevCache,
+            [chat.targetUserId]: updatedMessages,
+          }));
+          return updatedMessages;
         });
       });
     } else {
@@ -168,7 +191,13 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
                 index === existingMessageIndex ? { ...newMessage, id: newMessage.messageId } : msg
               );
             }
-            return [...prev, newMessage];
+            const updatedMessages = [...prev, newMessage];
+            // Cập nhật cache
+            setMessageCache((prevCache) => ({
+              ...prevCache,
+              [chat.targetUserId]: updatedMessages,
+            }));
+            return updatedMessages;
           });
         }
       });
@@ -176,9 +205,15 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       chatSocket.on('messageStatus', ({ messageId, status }) => {
         setMessages((prev) => {
           if (!Array.isArray(prev)) return prev;
-          return prev.map((msg) =>
+          const updatedMessages = prev.map((msg) =>
             (msg.id === messageId || msg.messageId === messageId) ? { ...msg, status } : msg
           );
+          // Cập nhật cache
+          setMessageCache((prevCache) => ({
+            ...prevCache,
+            [chat.targetUserId]: updatedMessages,
+          }));
+          return updatedMessages;
         });
       });
 
@@ -186,16 +221,28 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         console.log('Message recalled:', { messageId });
         setMessages((prev) => {
           if (!Array.isArray(prev)) return prev;
-          return prev.map((msg) =>
+          const updatedMessages = prev.map((msg) =>
             (msg.id === messageId || msg.messageId === messageId) ? { ...msg, status: 'recalled' } : msg
           );
+          // Cập nhật cache
+          setMessageCache((prevCache) => ({
+            ...prevCache,
+            [chat.targetUserId]: updatedMessages,
+          }));
+          return updatedMessages;
         });
       });
 
       chatSocket.on('messageDeleted', ({ messageId }) => {
         setMessages((prev) => {
           if (!Array.isArray(prev)) return prev;
-          return prev.filter((msg) => msg.id !== messageId && msg.messageId !== messageId);
+          const updatedMessages = prev.filter((msg) => msg.id !== messageId && msg.messageId !== messageId);
+          // Cập nhật cache
+          setMessageCache((prevCache) => ({
+            ...prevCache,
+            [chat.targetUserId]: updatedMessages,
+          }));
+          return updatedMessages;
         });
       });
 
@@ -262,7 +309,13 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
           if (response.success) {
             setMessages((prev) => {
               if (!Array.isArray(prev)) return [response.data];
-              return [...prev, response.data];
+              const updatedMessages = [...prev, response.data];
+              // Cập nhật cache
+              setMessageCache((prevCache) => ({
+                ...prevCache,
+                [chat.targetUserId]: updatedMessages,
+              }));
+              return updatedMessages;
             });
           } else {
             alert(response.message);
@@ -289,7 +342,13 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         if (response.success) {
           setMessages((prev) => {
             if (!Array.isArray(prev)) return [response.data];
-            return [...prev, response.data];
+            const updatedMessages = [...prev, response.data];
+            // Cập nhật cache
+            setMessageCache((prevCache) => ({
+              ...prevCache,
+              [chat.targetUserId]: updatedMessages,
+            }));
+            return updatedMessages;
           });
         } else {
           alert(response.message);
@@ -313,11 +372,17 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       if (response.success) {
         setMessages((prev) => {
           if (!Array.isArray(prev)) return prev;
-          return prev.map((msg) =>
+          const updatedMessages = prev.map((msg) =>
             (msg.id === messageId || msg.messageId === messageId)
               ? { ...msg, status: 'recalled' }
               : msg
           );
+          // Cập nhật cache
+          setMessageCache((prevCache) => ({
+            ...prevCache,
+            [chat.targetUserId]: updatedMessages,
+          }));
+          return updatedMessages;
         });
       } else {
         alert('Không thể thu hồi tin nhắn. Vui lòng thử lại.');
@@ -344,7 +409,13 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       if (response.success) {
         setMessages((prev) => {
           if (!Array.isArray(prev)) return prev;
-          return prev.filter((msg) => msg.id !== messageId && msg.messageId !== messageId);
+          const updatedMessages = prev.filter((msg) => msg.id !== messageId && msg.messageId !== messageId);
+          // Cập nhật cache
+          setMessageCache((prevCache) => ({
+            ...prevCache,
+            [chat.targetUserId]: updatedMessages,
+          }));
+          return updatedMessages;
         });
       } else {
         alert('Không thể xóa tin nhắn. Vui lòng thử lại.');
@@ -414,7 +485,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         {},
         {
           headers: { Authorization: `Bearer ${token.trim()}` },
-          params: { requestId: request.requestId }, // Send requestId as query parameter
+          params: { requestId: request.requestId },
         }
       );
 
