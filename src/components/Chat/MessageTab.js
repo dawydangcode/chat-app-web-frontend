@@ -4,6 +4,16 @@ import UserSearch from './UserSearch';
 import { useNavigate } from 'react-router-dom';
 import '../../assets/styles/ChatPage.css';
 import { FaBellSlash, FaThumbtack, FaUsers } from 'react-icons/fa';
+import { initializeSocket, getSocket } from '../../utils/socket';
+
+// Utility function for debouncing
+const debounce = (func, wait) => {
+  let timeout;
+  return (...args) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+};
 
 const MessagesTab = ({
   onSelectChat,
@@ -21,6 +31,10 @@ const MessagesTab = ({
   handleCloseSearch,
   isAddFriendModalOpen,
   setIsAddFriendModalOpen,
+  newMessageHighlights,
+  setNewMessageHighlights,
+  unreadCounts,
+  setUnreadCounts,
 }) => {
   const [chats, setChats] = useState([]);
   const [friendSearchQuery, setFriendSearchQuery] = useState('');
@@ -49,8 +63,6 @@ const MessagesTab = ({
         headers: { Authorization: `Bearer ${token.trim()}` },
       });
 
-      console.log('API /api/conversations/summary response:', response.data);
-
       if (response.data && response.data.success) {
         const { conversations = [], groups = [] } = response.data.data;
 
@@ -68,6 +80,7 @@ const MessagesTab = ({
           isPinned: conv.isPinned || false,
           targetUserId: conv.otherUserId,
           isGroup: false,
+          unreadCount: conv.unreadCount || 0,
         }));
 
         const formattedGroupChats = groups.map((group) => ({
@@ -84,6 +97,7 @@ const MessagesTab = ({
           targetUserId: group.groupId,
           isGroup: true,
           memberCount: group.memberCount || 0,
+          unreadCount: group.unreadCount || 0,
         }));
 
         const combinedChats = [...formattedIndividualChats, ...formattedGroupChats].sort((a, b) => {
@@ -93,6 +107,12 @@ const MessagesTab = ({
         });
 
         setChats(combinedChats);
+        setUnreadCounts(
+          combinedChats.reduce((acc, chat) => ({
+            ...acc,
+            [chat.id]: chat.unreadCount || 0,
+          }), {})
+        );
       }
     } catch (error) {
       console.error('Lỗi khi lấy danh sách hội thoại:', error);
@@ -107,6 +127,91 @@ const MessagesTab = ({
   useEffect(() => {
     fetchChats();
   }, [navigate, currentUserId]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const token = localStorage.getItem('token');
+    let chatSocket, groupSocket;
+
+    try {
+      chatSocket = initializeSocket(token, '/chat');
+      groupSocket = initializeSocket(token, '/group');
+    } catch (error) {
+      console.error('Socket initialization failed:', error);
+      navigate('/login');
+      return;
+    }
+
+    // Debounced handler for receiving messages
+    const handleReceiveMessage = debounce((data) => {
+      const newMessage = data.message || data;
+      const conversationId = newMessage.senderId === currentUserId ? newMessage.receiverId : newMessage.senderId;
+
+      setChats((prevChats) =>
+        prevChats.map((chat) =>
+          chat.id === conversationId
+            ? {
+                ...chat,
+                lastMessage: newMessage.status === 'recalled' ? '(Tin nhắn đã thu hồi)' : newMessage.content || 'Chưa có tin nhắn',
+                timestamp: newMessage.timestamp || new Date().toISOString(),
+              }
+            : chat
+        )
+      );
+
+      if (newMessage.senderId !== currentUserId) {
+        setNewMessageHighlights((prev) => {
+          const newSet = new Set(prev);
+          newSet.add(conversationId);
+          return newSet;
+        });
+        setUnreadCounts((prev) => ({
+          ...prev,
+          [conversationId]: (prev[conversationId] || 0) + 1,
+        }));
+      }
+    }, 100);
+
+    // Debounced handler for receiving group messages
+    const handleNewGroupMessage = debounce((data) => {
+      const { groupId, message } = data;
+      if (message.senderId !== currentUserId) {
+        setChats((prevChats) =>
+          prevChats.map((chat) =>
+            chat.id === groupId
+              ? {
+                  ...chat,
+                  lastMessage: message.status === 'recalled' ? '(Tin nhắn đã thu hồi)' : message.content || 'Chưa có tin nhắn',
+                  timestamp: message.timestamp || new Date().toISOString(),
+                }
+              : chat
+          )
+        );
+
+        setNewMessageHighlights((prev) => {
+          const newSet = new Set(prev);
+          newSet.add(groupId);
+          return newSet;
+        });
+        setUnreadCounts((prev) => ({
+          ...prev,
+          [groupId]: (prev[groupId] || 0) + 1,
+        }));
+      }
+    }, 100);
+
+    // Lắng nghe tin nhắn mới cho chat đơn
+    chatSocket.on('receiveMessage', handleReceiveMessage);
+
+    // Lắng nghe tin nhắn mới cho chat nhóm
+    groupSocket.on('newGroupMessage', handleNewGroupMessage);
+
+    return () => {
+      chatSocket.off('receiveMessage', handleReceiveMessage);
+      groupSocket.off('newGroupMessage', handleNewGroupMessage);
+    };
+  }, [currentUserId, navigate]);
 
   useEffect(() => {
     if (foundUser && friendStatus === 'stranger') {
@@ -169,7 +274,6 @@ const MessagesTab = ({
           if (statusError.response?.status === 404) {
             setFriendStatus('stranger');
           } else {
-            // Improved error handling for 500 or other errors
             alert(
               'Không thể kiểm tra trạng thái bạn bè do lỗi hệ thống. Giả định đây là người lạ để bạn có thể gửi lời mời kết bạn.'
             );
@@ -186,7 +290,7 @@ const MessagesTab = ({
       if (error.response?.status === 401) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
-        navigate('/login'); // Fixed typo from '/chat' to '/login'
+        navigate('/login');
       }
     }
   };
@@ -236,7 +340,6 @@ const MessagesTab = ({
         alert('Không thể gửi yêu cầu kết bạn: ' + (response.data?.error || 'Phản hồi không hợp lệ từ server.'));
       }
     } catch (error) {
-      // Enhanced error handling
       const errorMessage =
         error.response?.data?.error ||
         error.response?.data?.message ||
@@ -251,7 +354,44 @@ const MessagesTab = ({
   };
 
   const handleMarkAsRead = async (chatId) => {
-    // Tạm thời bỏ logic này vì backend không trả về unreadCount
+    try {
+      const token = localStorage.getItem('token');
+      const socket = getSocket('/chat');
+      
+      const endpoint = chatId.includes('-') // Giả định groupId chứa dấu '-'
+        ? `http://localhost:3000/api/groups/messages/mark-as-seen/${chatId}`
+        : `http://localhost:3000/api/messages/mark-as-seen/${chatId}`;
+
+      const response = await axios.post(
+        endpoint,
+        {},
+        { headers: { Authorization: `Bearer ${token.trim()}` } }
+      );
+
+      if (response.data.success) {
+        // No state updates here; handled in handleSelectChat
+        console.log(`Messages marked as seen for chat ${chatId}`);
+      }
+    } catch (error) {
+      console.error('Lỗi khi đánh dấu tin nhắn là đã xem:', error);
+    }
+  };
+
+  const handleSelectChat = (chat) => {
+    // Clear the highlight and unread count immediately
+    setNewMessageHighlights((prev) => {
+      const newSet = new Set(prev);
+      newSet.delete(chat.id);
+      return newSet;
+    });
+    setUnreadCounts((prev) => ({
+      ...prev,
+      [chat.id]: 0,
+    }));
+
+    // Proceed with selecting the chat and marking messages as read
+    onSelectChat(chat);
+    handleMarkAsRead(chat.id);
   };
 
   return (
@@ -268,11 +408,10 @@ const MessagesTab = ({
             chats.map((chat) => (
               <div
                 key={chat.id}
-                className={`chat-item ${chat.isPinned ? 'pinned' : ''}`}
-                onClick={() => {
-                  onSelectChat(chat);
-                  handleMarkAsRead(chat.id);
-                }}
+                className={`chat-item ${chat.isPinned ? 'pinned' : ''} ${
+                  newMessageHighlights.has(chat.id) ? 'new-message-highlight' : ''
+                } ${unreadCounts[chat.id] > 0 ? 'unread' : ''}`}
+                onClick={() => handleSelectChat(chat)}
               >
                 <img
                   src={chat.avatar}
@@ -289,6 +428,9 @@ const MessagesTab = ({
                     {chat.isGroup && <FaUsers className="group-icon" title="Nhóm chat" />}
                     {chat.isPinned && <FaThumbtack className="pinned-icon" />}
                     {chat.isMuted && <FaBellSlash className="muted-icon" />}
+                    {unreadCounts[chat.id] > 0 && (
+                      <span className="unread-badge">{unreadCounts[chat.id]}</span>
+                    )}
                   </p>
                   <p className="last-message">{chat.lastMessage || 'Chưa có tin nhắn'}</p>
                   <p className="chat-time">

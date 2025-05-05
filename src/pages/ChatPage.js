@@ -30,6 +30,9 @@ const ChatPage = () => {
   const [isAddFriendModalOpen, setIsAddFriendModalOpen] = useState(false);
   const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
   const [groups, setGroups] = useState([]);
+  // Add states for new message highlights and unread counts
+  const [newMessageHighlights, setNewMessageHighlights] = useState(new Set());
+  const [unreadCounts, setUnreadCounts] = useState({});
 
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const currentUserId = currentUser?.userId;
@@ -466,6 +469,10 @@ const ChatPage = () => {
               handleCloseSearch={handleCloseSearch}
               isAddFriendModalOpen={isAddFriendModalOpen}
               setIsAddFriendModalOpen={setIsAddFriendModalOpen}
+              newMessageHighlights={newMessageHighlights}
+              setNewMessageHighlights={setNewMessageHighlights}
+              unreadCounts={unreadCounts}
+              setUnreadCounts={setUnreadCounts}
             />
           )}
           {activeTab === 'contacts' && (
@@ -484,6 +491,8 @@ const ChatPage = () => {
               chat={selectedChat}
               toggleInfo={toggleInfo}
               isInfoVisible={isInfoVisible}
+              newMessageHighlights={newMessageHighlights}
+              unreadCounts={unreadCounts}
             />
           ) : (
             <div className="no-chat-selected">

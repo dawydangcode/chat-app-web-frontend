@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
@@ -10,7 +10,7 @@ import { AiOutlineUsergroupAdd } from 'react-icons/ai';
 import { initializeSocket, getSocket } from '../../utils/socket';
 import { v4 as uuidv4 } from 'uuid';
 
-const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
+const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unreadCounts }) => {
   const [messages, setMessages] = useState([]);
   const [messageCache, setMessageCache] = useState({});
   const [recentMessages, setRecentMessages] = useState([]);
@@ -20,6 +20,8 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const currentUserId = currentUser?.userId;
   const token = localStorage.getItem('token');
+  const chatSocketRef = useRef(null);
+  const groupSocketRef = useRef(null);
 
   useEffect(() => {
     if (!currentUserId || !token || !chat?.targetUserId) {
@@ -27,8 +29,10 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       return;
     }
 
-    const fetchMessages = async () => {
-      if (messageCache[chat.targetUserId]) {
+    const fetchMessages = async (forceFetch = false) => {
+      const shouldForceFetch = forceFetch || newMessageHighlights.has(chat.targetUserId) || (unreadCounts[chat.targetUserId] > 0);
+      
+      if (!shouldForceFetch && messageCache[chat.targetUserId]) {
         setMessages(messageCache[chat.targetUserId]);
         return;
       }
@@ -104,184 +108,170 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       }
     };
 
-    fetchMessages();
+    const markMessagesAsSeen = async () => {
+      try {
+        const response = await axios.get(
+          `http://localhost:3000/api/messages/user/${chat.targetUserId}`,
+          { headers: { Authorization: `Bearer ${token.trim()}` } }
+        );
+
+        if (response.data.success) {
+          const unreadMessages = response.data.messages.filter(
+            (msg) => msg.status === 'SENT' || msg.status === 'DELIVERED'
+          );
+          for (const msg of unreadMessages) {
+            await axios.patch(
+              `http://localhost:3000/api/messages/seen/${msg.messageId}`,
+              {},
+              { headers: { Authorization: `Bearer ${token.trim()}` } }
+            );
+          }
+          console.log(`Messages marked as seen for chat ${chat.targetUserId}`);
+        }
+      } catch (error) {
+        console.error('Error marking messages as seen:', error);
+      }
+    };
+
+    // Khởi tạo hoặc lấy socket
+    if (!chatSocketRef.current) {
+      try {
+        chatSocketRef.current = getSocket('/chat');
+        console.log('Chat Socket initialized:', chatSocketRef.current.id);
+      } catch (error) {
+        console.error('Socket not initialized:', error.message);
+        navigate('/login');
+        return;
+      }
+    }
+
+    if (chat.isGroup && !groupSocketRef.current) {
+      try {
+        groupSocketRef.current = getSocket('/group');
+        console.log('Group Socket initialized:', groupSocketRef.current.id);
+      } catch (error) {
+        console.error('Socket not initialized:', error.message);
+        navigate('/login');
+        return;
+      }
+    }
+
+    // Tham gia room mới khi thay đổi chat
+    if (chatSocketRef.current) {
+      chatSocketRef.current.emit('joinRoom', { room: `user:${currentUserId}` });
+      if (chat.isGroup && groupSocketRef.current) {
+        groupSocketRef.current.emit('joinRoom', { room: `group:${chat.targetUserId}` });
+      } else if (chat.targetUserId) {
+        chatSocketRef.current.emit('joinRoom', { room: `user:${chat.targetUserId}` });
+      }
+    }
+
+    // Lắng nghe sự kiện
+    const handleReceiveMessage = (newMessage) => {
+      if (
+        (newMessage.senderId === chat.targetUserId || newMessage.receiverId === chat.targetUserId) &&
+        newMessage.senderId !== currentUserId
+      ) {
+        setMessages((prev) => {
+          if (!Array.isArray(prev)) return [newMessage];
+          const existingMessageIndex = prev.findIndex(
+            (msg) => msg.tempId === newMessage.messageId || msg.messageId === newMessage.messageId
+          );
+          if (existingMessageIndex !== -1) {
+            return prev.map((msg, index) =>
+              index === existingMessageIndex ? { ...newMessage, id: newMessage.messageId } : msg
+            );
+          }
+          const updatedMessages = [...prev, newMessage];
+          setMessageCache((prevCache) => ({
+            ...prevCache,
+            [chat.targetUserId]: updatedMessages,
+          }));
+          return updatedMessages;
+        });
+      }
+    };
+
+    const handleMessageStatus = ({ messageId, status }) => {
+      setMessages((prev) => {
+        if (!Array.isArray(prev)) return prev;
+        const updatedMessages = prev.map((msg) =>
+          (msg.id === messageId || msg.messageId === messageId || msg.tempId === messageId)
+            ? { ...msg, status }
+            : msg
+        );
+        setMessageCache((prevCache) => ({
+          ...prevCache,
+          [chat.targetUserId]: updatedMessages,
+        }));
+        return updatedMessages;
+      });
+    };
+
+    const handleMessageRecalled = ({ messageId }) => {
+      setMessages((prev) => {
+        if (!Array.isArray(prev)) return prev;
+        const updatedMessages = prev.map((msg) =>
+          (msg.id === messageId || msg.messageId === messageId || msg.tempId === messageId)
+            ? { ...msg, status: 'recalled' }
+            : msg
+        );
+        setMessageCache((prevCache) => ({
+          ...prevCache,
+          [chat.targetUserId]: updatedMessages,
+        }));
+        return updatedMessages;
+      });
+    };
+
+    const handleMessageDeleted = ({ messageId }) => {
+      setMessages((prev) => {
+        if (!Array.isArray(prev)) return prev;
+        const updatedMessages = prev.filter(
+          (msg) => msg.id !== messageId && msg.messageId !== messageId && msg.tempId !== messageId
+        );
+        setMessageCache((prevCache) => ({
+          ...prevCache,
+          [chat.targetUserId]: updatedMessages,
+        }));
+        return updatedMessages;
+      });
+    };
+
+    if (chatSocketRef.current) {
+      chatSocketRef.current.on('receiveMessage', handleReceiveMessage);
+      chatSocketRef.current.on('messageStatus', handleMessageStatus);
+      chatSocketRef.current.on('messageRecalled', handleMessageRecalled);
+      chatSocketRef.current.on('messageDeleted', handleMessageDeleted);
+    }
+
+    if (chat.isGroup && groupSocketRef.current) {
+      groupSocketRef.current.on('newGroupMessage', handleReceiveMessage);
+    }
+
+    // Fetch data
+    fetchMessages(true);
     fetchRecentChats();
     if (!chat?.isGroup) {
       fetchFriendStatus();
     } else {
       setFriendStatus(null);
     }
+    markMessagesAsSeen();
 
-    let groupSocket, chatSocket;
-    try {
-      if (chat.isGroup) {
-        groupSocket = initializeSocket(token, '/group');
-        console.log('Group Socket initialized for /group:', groupSocket.id);
-      }
-      chatSocket = initializeSocket(token, '/chat');
-      console.log('Chat Socket initialized for /chat:', chatSocket.id);
-    } catch (error) {
-      console.error('Socket not initialized:', error.message);
-      navigate('/login');
-      return;
-    }
-
-    if (chat.isGroup) {
-      groupSocket.emit('joinRoom', { room: `user:${currentUserId}` });
-      groupSocket.emit('joinRoom', { room: `group:${chat.targetUserId}` });
-
-      groupSocket.on('newGroupMessage', (data) => {
-        console.log('Received new group message:', data);
-        if (data.groupId === chat.targetUserId && data.message.senderId !== currentUserId) {
-          setMessages((prev) => {
-            if (!Array.isArray(prev)) return [data.message];
-            const existingMessageIndex = prev.findIndex(
-              (msg) => msg.id === data.message.messageId || msg.messageId === data.message.messageId
-            );
-            if (existingMessageIndex !== -1) {
-              return prev.map((msg, index) =>
-                index === existingMessageIndex ? { ...data.message, id: data.message.messageId } : msg
-              );
-            }
-            const updatedMessages = [...prev, data.message];
-            setMessageCache((prevCache) => ({
-              ...prevCache,
-              [chat.targetUserId]: updatedMessages,
-            }));
-            return updatedMessages;
-          });
-        }
-      });
-
-      chatSocket.on('messageRecalled', (data) => {
-        console.log('Group message recalled:', data);
-        setMessages((prev) => {
-          if (!Array.isArray(prev)) return prev;
-          const updatedMessages = prev.map((msg) =>
-            (msg.id === data.messageId || msg.messageId === data.messageId)
-              ? { ...msg, status: 'recalled' }
-              : msg
-          );
-          setMessageCache((prevCache) => ({
-            ...prevCache,
-            [chat.targetUserId]: updatedMessages,
-          }));
-          return updatedMessages;
-        });
-      });
-    } else {
-      chatSocket.emit('joinRoom', { room: `user:${currentUserId}` });
-
-      chatSocket.on('receiveMessage', (newMessage) => {
-        console.log('Received message:', newMessage);
-        if (
-          newMessage.senderId === chat.targetUserId ||
-          newMessage.receiverId === chat.targetUserId
-        ) {
-          setMessages((prev) => {
-            if (!Array.isArray(prev)) return [newMessage];
-            const existingMessageIndex = prev.findIndex(
-              (msg) => msg.tempId === newMessage.messageId || msg.messageId === newMessage.messageId
-            );
-            if (existingMessageIndex !== -1) {
-              if (['sent', 'delivered', 'seen'].includes(newMessage.status)) {
-                const updatedMessages = prev.map((msg, index) =>
-                  index === existingMessageIndex ? { ...newMessage, id: newMessage.messageId } : msg
-                );
-                setMessageCache((prevCache) => ({
-                  ...prevCache,
-                  [chat.targetUserId]: updatedMessages,
-                }));
-                return updatedMessages;
-              } else {
-                const updatedMessages = prev.filter((_, index) => index !== existingMessageIndex);
-                setMessageCache((prevCache) => ({
-                  ...prevCache,
-                  [chat.targetUserId]: updatedMessages,
-                }));
-                return updatedMessages;
-              }
-            }
-            if (['sent', 'delivered', 'seen'].includes(newMessage.status)) {
-              const updatedMessages = [...prev, newMessage];
-              setMessageCache((prevCache) => ({
-                ...prevCache,
-                [chat.targetUserId]: updatedMessages,
-              }));
-              return updatedMessages;
-            }
-            return prev;
-          });
-        }
-      });
-
-      chatSocket.on('messageStatus', ({ messageId, status }) => {
-        setMessages((prev) => {
-          if (!Array.isArray(prev)) return prev;
-          const updatedMessages = prev.map((msg) =>
-            (msg.id === messageId || msg.messageId === messageId || msg.tempId === messageId)
-              ? { ...msg, status }
-              : msg
-          );
-          setMessageCache((prevCache) => ({
-            ...prevCache,
-            [chat.targetUserId]: updatedMessages,
-          }));
-          return updatedMessages;
-        });
-      });
-
-      chatSocket.on('messageRecalled', ({ messageId }) => {
-        console.log('Message recalled:', { messageId });
-        setMessages((prev) => {
-          if (!Array.isArray(prev)) return prev;
-          const updatedMessages = prev.map((msg) =>
-            (msg.id === messageId || msg.messageId === messageId || msg.tempId === messageId)
-              ? { ...msg, status: 'recalled' }
-              : msg
-          );
-          setMessageCache((prevCache) => ({
-            ...prevCache,
-            [chat.targetUserId]: updatedMessages,
-          }));
-          return updatedMessages;
-        });
-      });
-
-      chatSocket.on('messageDeleted', ({ messageId }) => {
-        setMessages((prev) => {
-          if (!Array.isArray(prev)) return prev;
-          const updatedMessages = prev.filter(
-            (msg) => msg.id !== messageId && msg.messageId !== messageId && msg.tempId !== messageId
-          );
-          setMessageCache((prevCache) => ({
-            ...prevCache,
-            [chat.targetUserId]: updatedMessages,
-          }));
-          return updatedMessages;
-        });
-      });
-
-      chatSocket.on('user:status', ({ userId, status }) => {
-        if (userId === chat.targetUserId) {
-          console.log(`User ${userId} is now ${status}`);
-        }
-      });
-    }
-
+    // Cleanup
     return () => {
-      if (chat.isGroup) {
-        groupSocket.off('newGroupMessage');
-        chatSocket.off('messageRecalled');
-      } else {
-        chatSocket.off('receiveMessage');
-        chatSocket.off('messageStatus');
-        chatSocket.off('messageRecalled');
-        chatSocket.off('messageDeleted');
-        chatSocket.off('user:status');
+      if (chatSocketRef.current) {
+        chatSocketRef.current.off('receiveMessage', handleReceiveMessage);
+        chatSocketRef.current.off('messageStatus', handleMessageStatus);
+        chatSocketRef.current.off('messageRecalled', handleMessageRecalled);
+        chatSocketRef.current.off('messageDeleted', handleMessageDeleted);
+      }
+      if (chat.isGroup && groupSocketRef.current) {
+        groupSocketRef.current.off('newGroupMessage', handleReceiveMessage);
       }
     };
-  }, [chat, currentUserId, token, navigate]);
+  }, [chat, currentUserId, token, navigate, newMessageHighlights, unreadCounts]);
 
   const handleSendMessage = async (data, onComplete) => {
     if (!currentUserId || !chat?.targetUserId || !token) {
@@ -292,16 +282,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
 
     const socketNamespace = chat.isGroup ? '/group' : '/chat';
     const eventName = chat.isGroup ? 'sendGroupMessage' : 'sendMessage';
-    let socket;
-    try {
-      socket = getSocket(socketNamespace);
-      console.log(`Socket retrieved for ${socketNamespace} namespace:`, socket.id);
-    } catch (error) {
-      console.error(`Socket not initialized for ${socketNamespace}:`, error.message);
-      navigate('/login');
-      onComplete?.();
-      return;
-    }
+    let socket = getSocket(socketNamespace);
 
     const tempId = uuidv4();
     const tempMessage = {
@@ -342,10 +323,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
           },
         };
 
-        console.log(`Emitting ${eventName} with data:`, messageData);
-
         socket.emit(eventName, messageData, (response) => {
-          console.log(`Received ${eventName} response:`, response);
           setMessages((prev) => {
             if (!Array.isArray(prev)) return prev;
             if (response.success) {
@@ -399,10 +377,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         content: data.content,
       };
 
-      console.log(`Emitting ${eventName} with data:`, messageData);
-
       socket.emit(eventName, messageData, (response) => {
-        console.log(`Received ${eventName} response:`, response);
         setMessages((prev) => {
           if (!Array.isArray(prev)) return prev;
           if (response.success) {
@@ -434,15 +409,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
   };
 
   const handleRecallMessage = async (messageId) => {
-    let socket;
-    try {
-      socket = getSocket('/chat');
-    } catch (error) {
-      console.error('Socket not initialized for /chat:', error.message);
-      alert('Không thể thu hồi tin nhắn. Vui lòng đăng nhập lại.');
-      return;
-    }
-
+    let socket = getSocket('/chat');
     socket.emit('recallMessage', { messageId }, (response) => {
       if (response.success) {
         setMessages((prev) => {
@@ -470,15 +437,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       return;
     }
 
-    let socket;
-    try {
-      socket = getSocket('/chat');
-    } catch (error) {
-      console.error('Socket not initialized for /chat:', error.message);
-      alert('Không thể xóa tin nhắn. Vui lòng đăng nhập lại.');
-      return;
-    }
-
+    let socket = getSocket('/chat');
     socket.emit('deleteMessage', { messageId }, (response) => {
       if (response.success) {
         setMessages((prev) => {
@@ -499,15 +458,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
   };
 
   const handleForwardMessage = async (messageId, targetUserId) => {
-    let socket;
-    try {
-      socket = getSocket('/chat');
-    } catch (error) {
-      console.error('Socket not initialized for /chat:', error.message);
-      alert('Không thể chuyển tiếp tin nhắn. Vui lòng đăng nhập lại.');
-      return;
-    }
-
+    let socket = getSocket('/chat');
     socket.emit('forwardMessage', { messageId, targetReceiverId: targetUserId }, (response) => {
       if (!response.success) {
         alert('Không thể chuyển tiếp tin nhắn. Vui lòng thử lại.');

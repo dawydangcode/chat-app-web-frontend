@@ -760,3 +760,21 @@ body {
   color: #666;
   border: 1px solid #ccc;
 }
+
+/* Viền đậm cho cuộc hội thoại có tin nhắn mới */
+.chat-item.new-message-highlight {
+  border: 2px solid #ff4444; /* Viền đậm màu đỏ khi có tin nhắn mới */
+  border-radius: 8px;
+  transition: border 0.3s ease;
+}
+
+.chat-item.new-message-highlight:hover {
+  border-color: #ff6666;
+}
+
+/* Làm nổi bật cuộc hội thoại đang được chọn */
+.chat-item.selected-chat {
+  background-color: #e6f0ff; /* Màu nền xanh nhạt khi được chọn */
+  border-radius: 8px;
+  transition: background-color 0.3s ease;
+}
