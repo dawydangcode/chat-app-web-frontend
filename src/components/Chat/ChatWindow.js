@@ -8,10 +8,11 @@ import { useNavigate } from 'react-router-dom';
 import { VscLayoutSidebarRightOff } from 'react-icons/vsc';
 import { AiOutlineUsergroupAdd } from 'react-icons/ai';
 import { initializeSocket, getSocket } from '../../utils/socket';
+import { v4 as uuidv4 } from 'uuid';
 
 const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
   const [messages, setMessages] = useState([]);
-  const [messageCache, setMessageCache] = useState({}); // Cache để lưu trữ tin nhắn
+  const [messageCache, setMessageCache] = useState({});
   const [recentMessages, setRecentMessages] = useState([]);
   const [friendStatus, setFriendStatus] = useState(null);
   const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
@@ -27,7 +28,6 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
     }
 
     const fetchMessages = async () => {
-      // Kiểm tra cache trước khi gọi API
       if (messageCache[chat.targetUserId]) {
         setMessages(messageCache[chat.targetUserId]);
         return;
@@ -45,7 +45,6 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         if (response.data.success) {
           const fetchedMessages = chat.isGroup ? response.data.data.messages || [] : response.data.messages || [];
           setMessages(fetchedMessages);
-          // Lưu tin nhắn vào cache
           setMessageCache((prev) => ({
             ...prev,
             [chat.targetUserId]: fetchedMessages,
@@ -145,7 +144,6 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
               );
             }
             const updatedMessages = [...prev, data.message];
-            // Cập nhật cache
             setMessageCache((prevCache) => ({
               ...prevCache,
               [chat.targetUserId]: updatedMessages,
@@ -164,7 +162,6 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
               ? { ...msg, status: 'recalled' }
               : msg
           );
-          // Cập nhật cache
           setMessageCache((prevCache) => ({
             ...prevCache,
             [chat.targetUserId]: updatedMessages,
@@ -184,20 +181,39 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
           setMessages((prev) => {
             if (!Array.isArray(prev)) return [newMessage];
             const existingMessageIndex = prev.findIndex(
-              (msg) => msg.id === newMessage.messageId || msg.messageId === newMessage.messageId
+              (msg) => msg.tempId === newMessage.messageId || msg.messageId === newMessage.messageId
             );
             if (existingMessageIndex !== -1) {
-              return prev.map((msg, index) =>
-                index === existingMessageIndex ? { ...newMessage, id: newMessage.messageId } : msg
-              );
+              // Cập nhật tin nhắn tạm thời (pending) thành tin nhắn chính thức
+              if (['sent', 'delivered', 'seen'].includes(newMessage.status)) {
+                const updatedMessages = prev.map((msg, index) =>
+                  index === existingMessageIndex ? { ...newMessage, id: newMessage.messageId } : msg
+                );
+                setMessageCache((prevCache) => ({
+                  ...prevCache,
+                  [chat.targetUserId]: updatedMessages,
+                }));
+                return updatedMessages;
+              } else {
+                // Nếu trạng thái không hợp lệ, xóa tin nhắn tạm thời
+                const updatedMessages = prev.filter((_, index) => index !== existingMessageIndex);
+                setMessageCache((prevCache) => ({
+                  ...prevCache,
+                  [chat.targetUserId]: updatedMessages,
+                }));
+                return updatedMessages;
+              }
             }
-            const updatedMessages = [...prev, newMessage];
-            // Cập nhật cache
-            setMessageCache((prevCache) => ({
-              ...prevCache,
-              [chat.targetUserId]: updatedMessages,
-            }));
-            return updatedMessages;
+            // Thêm tin nhắn mới nếu trạng thái hợp lệ
+            if (['sent', 'delivered', 'seen'].includes(newMessage.status)) {
+              const updatedMessages = [...prev, newMessage];
+              setMessageCache((prevCache) => ({
+                ...prevCache,
+                [chat.targetUserId]: updatedMessages,
+              }));
+              return updatedMessages;
+            }
+            return prev;
           });
         }
       });
@@ -206,9 +222,10 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         setMessages((prev) => {
           if (!Array.isArray(prev)) return prev;
           const updatedMessages = prev.map((msg) =>
-            (msg.id === messageId || msg.messageId === messageId) ? { ...msg, status } : msg
+            (msg.id === messageId || msg.messageId === messageId || msg.tempId === messageId)
+              ? { ...msg, status }
+              : msg
           );
-          // Cập nhật cache
           setMessageCache((prevCache) => ({
             ...prevCache,
             [chat.targetUserId]: updatedMessages,
@@ -222,9 +239,10 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         setMessages((prev) => {
           if (!Array.isArray(prev)) return prev;
           const updatedMessages = prev.map((msg) =>
-            (msg.id === messageId || msg.messageId === messageId) ? { ...msg, status: 'recalled' } : msg
+            (msg.id === messageId || msg.messageId === messageId || msg.tempId === messageId)
+              ? { ...msg, status: 'recalled' }
+              : msg
           );
-          // Cập nhật cache
           setMessageCache((prevCache) => ({
             ...prevCache,
             [chat.targetUserId]: updatedMessages,
@@ -236,8 +254,9 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       chatSocket.on('messageDeleted', ({ messageId }) => {
         setMessages((prev) => {
           if (!Array.isArray(prev)) return prev;
-          const updatedMessages = prev.filter((msg) => msg.id !== messageId && msg.messageId !== messageId);
-          // Cập nhật cache
+          const updatedMessages = prev.filter(
+            (msg) => msg.id !== messageId && msg.messageId !== messageId && msg.tempId !== messageId
+          );
           setMessageCache((prevCache) => ({
             ...prevCache,
             [chat.targetUserId]: updatedMessages,
@@ -287,6 +306,32 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       return;
     }
 
+    // Tạo tin nhắn tạm thời với trạng thái pending
+    const tempId = uuidv4();
+    const tempMessage = {
+      tempId,
+      senderId: currentUserId,
+      receiverId: chat.isGroup ? null : chat.targetUserId,
+      groupId: chat.isGroup ? chat.targetUserId : null,
+      type: data instanceof FormData ? (data.get('type') || 'file') : data.type,
+      content: data instanceof FormData ? 'File attachment' : data.content,
+      status: 'pending',
+      timestamp: new Date().toISOString(),
+      fileName: data instanceof FormData ? data.get('fileName') : null,
+      mimeType: data instanceof FormData ? data.get('mimeType') : null,
+    };
+
+    // Thêm tin nhắn tạm thời vào danh sách
+    setMessages((prev) => {
+      if (!Array.isArray(prev)) return [tempMessage];
+      const updatedMessages = [...prev, tempMessage];
+      setMessageCache((prevCache) => ({
+        ...prevCache,
+        [chat.targetUserId]: updatedMessages,
+      }));
+      return updatedMessages;
+    });
+
     if (data instanceof FormData) {
       try {
         const file = data.get('file');
@@ -306,24 +351,42 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
 
         socket.emit(eventName, messageData, (response) => {
           console.log(`Received ${eventName} response:`, response);
-          if (response.success) {
-            setMessages((prev) => {
-              if (!Array.isArray(prev)) return [response.data];
-              const updatedMessages = [...prev, response.data];
-              // Cập nhật cache
+          setMessages((prev) => {
+            if (!Array.isArray(prev)) return prev;
+            if (response.success && ['sent', 'delivered', 'seen'].includes(response.data.status)) {
+              // Cập nhật tin nhắn tạm thời với dữ liệu từ server
+              const updatedMessages = prev.map((msg) =>
+                msg.tempId === tempId ? { ...response.data, id: response.data.messageId } : msg
+              );
               setMessageCache((prevCache) => ({
                 ...prevCache,
                 [chat.targetUserId]: updatedMessages,
               }));
               return updatedMessages;
-            });
-          } else {
-            alert(response.message);
-          }
+            } else {
+              // Xóa tin nhắn tạm thời nếu gửi thất bại
+              const updatedMessages = prev.filter((msg) => msg.tempId !== tempId);
+              setMessageCache((prevCache) => ({
+                ...prevCache,
+                [chat.targetUserId]: updatedMessages,
+              }));
+              alert(response.message || 'Tin nhắn chưa được gửi. Vui lòng thử lại.');
+              return updatedMessages;
+            }
+          });
           onComplete?.();
         });
       } catch (error) {
         console.error('Error sending file:', error);
+        setMessages((prev) => {
+          if (!Array.isArray(prev)) return prev;
+          const updatedMessages = prev.filter((msg) => msg.tempId !== tempId);
+          setMessageCache((prevCache) => ({
+            ...prevCache,
+            [chat.targetUserId]: updatedMessages,
+          }));
+          return updatedMessages;
+        });
         alert('Không thể gửi file. Vui lòng thử lại.');
         onComplete?.();
       }
@@ -339,20 +402,29 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
 
       socket.emit(eventName, messageData, (response) => {
         console.log(`Received ${eventName} response:`, response);
-        if (response.success) {
-          setMessages((prev) => {
-            if (!Array.isArray(prev)) return [response.data];
-            const updatedMessages = [...prev, response.data];
-            // Cập nhật cache
+        setMessages((prev) => {
+          if (!Array.isArray(prev)) return prev;
+          if (response.success && ['sent', 'delivered', 'seen'].includes(response.data.status)) {
+            // Cập nhật tin nhắn tạm thời với dữ liệu từ server
+            const updatedMessages = prev.map((msg) =>
+              msg.tempId === tempId ? { ...response.data, id: response.data.messageId } : msg
+            );
             setMessageCache((prevCache) => ({
               ...prevCache,
               [chat.targetUserId]: updatedMessages,
             }));
             return updatedMessages;
-          });
-        } else {
-          alert(response.message);
-        }
+          } else {
+            // Xóa tin nhắn tạm thời nếu gửi thất bại
+            const updatedMessages = prev.filter((msg) => msg.tempId !== tempId);
+            setMessageCache((prevCache) => ({
+              ...prevCache,
+              [chat.targetUserId]: updatedMessages,
+            }));
+            alert(response.message || 'Tin nhắn chưa được gửi. Vui lòng thử lại.');
+            return updatedMessages;
+          }
+        });
         onComplete?.();
       });
     }
@@ -373,11 +445,10 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         setMessages((prev) => {
           if (!Array.isArray(prev)) return prev;
           const updatedMessages = prev.map((msg) =>
-            (msg.id === messageId || msg.messageId === messageId)
+            (msg.id === messageId || msg.messageId === messageId || msg.tempId === messageId)
               ? { ...msg, status: 'recalled' }
               : msg
           );
-          // Cập nhật cache
           setMessageCache((prevCache) => ({
             ...prevCache,
             [chat.targetUserId]: updatedMessages,
@@ -409,8 +480,9 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       if (response.success) {
         setMessages((prev) => {
           if (!Array.isArray(prev)) return prev;
-          const updatedMessages = prev.filter((msg) => msg.id !== messageId && msg.messageId !== messageId);
-          // Cập nhật cache
+          const updatedMessages = prev.filter(
+            (msg) => msg.id !== messageId && msg.messageId !== messageId && msg.tempId !== messageId
+          );
           setMessageCache((prevCache) => ({
             ...prevCache,
             [chat.targetUserId]: updatedMessages,

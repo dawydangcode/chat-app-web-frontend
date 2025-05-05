@@ -108,11 +108,12 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
         const isSameSenderAsNext = nextGroup && (nextGroup.senderId === lastMessage.senderId || (nextGroup.type === 'image-group' && nextGroup.senderId === lastMessage.senderId));
         const showTime = !isSameSenderAsNext || groupIndex === groupedMessages.length - 1;
         const showAvatarAndName = !isCurrentUser && (!isSameSenderAsPrevious || groupIndex === 0);
+        const isPending = ['pending', 'sending'].includes(firstMessage.status);
 
         return (
           <div
             key={groupIndex}
-            className={`message ${isCurrentUser ? 'message-right' : 'message-left'} ${isGroupMessage ? 'media-message' : ''}`}
+            className={`message ${isCurrentUser ? 'message-right' : 'message-left'} ${isGroupMessage ? 'media-message' : ''} ${isPending ? 'message-pending' : ''}`}
           >
             {showAvatarAndName && (
               <div className="message-sender-info">
@@ -146,8 +147,8 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                   {isGroupMessage ? (
                     <div className="media-message-group">
                       {groupMessages.map((message, idx) => (
-                        <div key={message.id || message.messageId} className="media-message-container">
-                          {mediaLoadError === (message.id || message.messageId) ? (
+                        <div key={message.id || message.messageId || message.tempId} className="media-message-container">
+                          {mediaLoadError === (message.id || message.messageId || message.tempId) ? (
                             <div className="media-error">
                               <p>Không thể tải hình ảnh: {message.fileName || 'Image'}</p>
                               <a href={message.mediaUrl} target="_blank" rel="noopener noreferrer">
@@ -159,9 +160,14 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                               src={message.mediaUrl}
                               alt={message.fileName || 'Image'}
                               onClick={() => handleMediaClick(message.mediaUrl, message.mimeType)}
-                              onError={() => handleMediaError(message.id || message.messageId)}
-                              style={{ cursor: 'pointer' }}
+                              onError={() => handleMediaError(message.id || message.messageId || message.tempId)}
+                              style={{ cursor: 'pointer', opacity: isPending ? 0.6 : 1 }}
                             />
+                          )}
+                          {isPending && (
+                            <div className="pending-indicator">
+                              <span className="pending-text">Đang gửi</span>
+                            </div>
                           )}
                         </div>
                       ))}
@@ -173,29 +179,39 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                           {firstMessage.sender?.name || 'Không có tên'}
                         </span>
                       )}
-                      {firstMessage.type === 'text' && <p>{firstMessage.content}</p>}
+                      {firstMessage.type === 'text' && <p style={{ opacity: isPending ? 0.6 : 1 }}>{firstMessage.content}</p>}
                       {(firstMessage.type === 'video') && firstMessage.mediaUrl ? (
                         <div className="media-message-container">
                           <video
                             controls
                             onClick={() => handleMediaClick(firstMessage.mediaUrl, firstMessage.mimeType)}
-                            onError={() => handleMediaError(firstMessage.id || firstMessage.messageId)}
-                            style={{ cursor: 'pointer' }}
+                            onError={() => handleMediaError(firstMessage.id || firstMessage.messageId || firstMessage.tempId)}
+                            style={{ cursor: 'pointer', opacity: isPending ? 0.6 : 1 }}
                           >
                             <source src={firstMessage.mediaUrl} type={firstMessage.mimeType} />
                             Trình duyệt của bạn không hỗ trợ video.
                           </video>
+                          {isPending && (
+                            <div className="pending-indicator">
+                              <span className="pending-text">Đang gửi</span>
+                            </div>
+                          )}
                         </div>
                       ) : null}
                       {(firstMessage.type === 'file' || firstMessage.type === 'pdf' || firstMessage.type === 'zip') && firstMessage.mediaUrl ? (
                         <div className="media-container">
-                          <a href={firstMessage.mediaUrl} target="_blank" rel="noopener noreferrer">
+                          <a href={firstMessage.mediaUrl} target="_blank" rel="noopener noreferrer" style={{ opacity: isPending ? 0.6 : 1 }}>
                             {firstMessage.fileName || 'File'}
                           </a>
+                          {isPending && (
+                            <div className="pending-indicator">
+                              <span className="pending-text">Đang gửi</span>
+                            </div>
+                          )}
                         </div>
                       ) : (
                         firstMessage.type !== 'text' && !firstMessage.mediaUrl && (
-                          <p>Không thể hiển thị file: {firstMessage.fileName || 'Unknown'}</p>
+                          <p style={{ opacity: isPending ? 0.6 : 1 }}>Không thể hiển thị file: {firstMessage.fileName || 'Unknown'}</p>
                         )
                       )}
                       {firstMessage.status === 'error' && firstMessage.errorMessage && (
@@ -214,40 +230,42 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                     )}
                     {isCurrentUser && !chat.isGroup && (
                       <span className={`message-status ${lastMessage.status}`}>
-                        {lastMessage.status === 'pending' && 'Đang gửi...'}
                         {lastMessage.status === 'sent' && '✓'}
                         {lastMessage.status === 'delivered' && '✓✓'}
                         {lastMessage.status === 'seen' && 'Đã xem'}
                         {lastMessage.status === 'error' && 'Lỗi'}
+                        {isPending && <span className="pending-text">Đang gửi</span>}
                       </span>
                     )}
                   </div>
                 </>
               )}
-              <div className="message-actions">
-                {isCurrentUser && lastMessage.status !== 'recalled' && (
-                  <button onClick={() => onRecallMessage(lastMessage.id || lastMessage.messageId)}>
-                    <FaUndo />
-                  </button>
-                )}
-                {!chat.isGroup && (
-                  <button onClick={() => handleDeleteClick(lastMessage.id || lastMessage.messageId)}>
-                    <FaTrash />
-                  </button>
-                )}
-                {lastMessage.status !== 'recalled' && (
-                  <button
-                    onClick={() => {
-                      const targetUserId = prompt('Nhập ID người nhận để chuyển tiếp:');
-                      if (targetUserId) {
-                        onForwardMessage(lastMessage.id || lastMessage.messageId, targetUserId);
-                      }
-                    }}
-                  >
-                    <FaShare />
-                  </button>
-                )}
-              </div>
+              {!isPending && (
+                <div className="message-actions">
+                  {isCurrentUser && lastMessage.status !== 'recalled' && (
+                    <button onClick={() => onRecallMessage(lastMessage.id || lastMessage.messageId)}>
+                      <FaUndo />
+                    </button>
+                  )}
+                  {!chat.isGroup && (
+                    <button onClick={() => handleDeleteClick(lastMessage.id || lastMessage.messageId)}>
+                      <FaTrash />
+                    </button>
+                  )}
+                  {lastMessage.status !== 'recalled' && (
+                    <button
+                      onClick={() => {
+                        const targetUserId = prompt('Nhập ID người nhận để chuyển tiếp:');
+                        if (targetUserId) {
+                          onForwardMessage(lastMessage.id || lastMessage.messageId, targetUserId);
+                        }
+                      }}
+                    >
+                      <FaShare />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         );
