@@ -3,7 +3,7 @@ import axios from 'axios';
 import UserSearch from './UserSearch';
 import { useNavigate } from 'react-router-dom';
 import '../../assets/styles/ChatPage.css';
-import { FaBellSlash, FaThumbtack, FaUsers } from 'react-icons/fa'; // Thêm FaUsers để hiển thị biểu tượng nhóm
+import { FaBellSlash, FaThumbtack, FaUsers } from 'react-icons/fa';
 
 const MessagesTab = ({
   onSelectChat,
@@ -54,7 +54,6 @@ const MessagesTab = ({
       if (response.data && response.data.success) {
         const { conversations = [], groups = [] } = response.data.data;
 
-        // Xử lý hội thoại cá nhân
         const formattedIndividualChats = conversations.map((conv) => ({
           id: conv.otherUserId,
           name: conv.displayName || 'Không có tên',
@@ -68,10 +67,9 @@ const MessagesTab = ({
           isMuted: conv.isMuted || false,
           isPinned: conv.isPinned || false,
           targetUserId: conv.otherUserId,
-          isGroup: false, // Đánh dấu đây là hội thoại cá nhân
+          isGroup: false,
         }));
 
-        // Xử lý hội thoại nhóm
         const formattedGroupChats = groups.map((group) => ({
           id: group.groupId,
           name: group.name || 'Nhóm không tên',
@@ -81,14 +79,13 @@ const MessagesTab = ({
               ? '(Tin nhắn đã thu hồi)'
               : group.lastMessage?.content || 'Chưa có tin nhắn',
           timestamp: group.lastMessage?.timestamp || group.createdAt || new Date().toISOString(),
-          isMuted: false, // Hiện tại API không trả về isMuted cho nhóm, có thể thêm sau
-          isPinned: false, // Hiện tại API không trả về isPinned cho nhóm, có thể thêm sau
-          targetUserId: group.groupId, // Dùng groupId làm targetUserId để phù hợp với onSelectChat
-          isGroup: true, // Đánh dấu đây là hội thoại nhóm
-          memberCount: group.memberCount || 0, // Số thành viên trong nhóm
+          isMuted: false,
+          isPinned: false,
+          targetUserId: group.groupId,
+          isGroup: true,
+          memberCount: group.memberCount || 0,
         }));
 
-        // Kết hợp danh sách hội thoại cá nhân và nhóm, sắp xếp theo thời gian
         const combinedChats = [...formattedIndividualChats, ...formattedGroupChats].sort((a, b) => {
           if (a.isPinned && !b.isPinned) return -1;
           if (!a.isPinned && b.isPinned) return 1;
@@ -128,7 +125,10 @@ const MessagesTab = ({
   };
 
   const handleSearchFriend = async () => {
-    if (!friendSearchQuery) return;
+    if (!friendSearchQuery) {
+      alert('Vui lòng nhập số điện thoại để tìm kiếm.');
+      return;
+    }
 
     const phoneRegex = /^\d{10}$/;
     if (!phoneRegex.test(friendSearchQuery)) {
@@ -153,27 +153,40 @@ const MessagesTab = ({
         };
         setFoundUser(formattedUser);
 
-        const statusResponse = await axios.get(
-          `http://localhost:3000/api/friends/status/${formattedUser.userId}`,
-          { headers: { Authorization: `Bearer ${token.trim()}` } }
-        );
+        try {
+          const statusResponse = await axios.get(
+            `http://localhost:3000/api/friends/status/${formattedUser.userId}`,
+            { headers: { Authorization: `Bearer ${token.trim()}` } }
+          );
 
-        if (statusResponse.data && statusResponse.data.status) {
-          setFriendStatus(statusResponse.data.status);
-        } else {
-          setFriendStatus('stranger');
+          if (statusResponse.data && statusResponse.data.status) {
+            setFriendStatus(statusResponse.data.status);
+          } else {
+            setFriendStatus('stranger');
+          }
+        } catch (statusError) {
+          console.error('Lỗi khi lấy trạng thái bạn bè:', statusError);
+          if (statusError.response?.status === 404) {
+            setFriendStatus('stranger');
+          } else {
+            // Improved error handling for 500 or other errors
+            alert(
+              'Không thể kiểm tra trạng thái bạn bè do lỗi hệ thống. Giả định đây là người lạ để bạn có thể gửi lời mời kết bạn.'
+            );
+            setFriendStatus('stranger');
+          }
         }
       } else {
         setFoundUser(null);
-        alert('Không tìm thấy người dùng.');
+        alert('Không tìm thấy người dùng với số điện thoại này.');
       }
     } catch (error) {
       setFoundUser(null);
-      alert('Không tìm thấy người dùng.');
+      alert('Không tìm thấy người dùng: ' + (error.response?.data?.message || 'Lỗi hệ thống.'));
       if (error.response?.status === 401) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
-        navigate('/login');
+        navigate('/login'); // Fixed typo from '/chat' to '/login'
       }
     }
   };
@@ -215,15 +228,20 @@ const MessagesTab = ({
         { headers: { Authorization: `Bearer ${token.trim()}` } }
       );
 
-      if (response.data && response.data.message) {
+      if (response.data && response.data.success) {
         alert('Đã gửi yêu cầu kết bạn thành công!');
         setFriendStatus('pending_sent');
         setFriendRequestMessage('');
       } else {
-        alert('Không thể gửi yêu cầu kết bạn.');
+        alert('Không thể gửi yêu cầu kết bạn: ' + (response.data?.error || 'Phản hồi không hợp lệ từ server.'));
       }
     } catch (error) {
-      alert('Lỗi khi gửi yêu cầu kết bạn: ' + (error.response?.data?.error || error.message));
+      // Enhanced error handling
+      const errorMessage =
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        'Lỗi hệ thống khi gửi yêu cầu kết bạn. Vui lòng thử lại sau.';
+      alert('Lỗi khi gửi yêu cầu kết bạn: ' + errorMessage);
       if (error.response?.status === 401) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -305,15 +323,9 @@ const MessagesTab = ({
               {!foundUser ? (
                 <>
                   <div className="friend-search-container">
-                    <span className="country-code">
-                      <span role="img" aria-label="Vietnam flag">🇻🇳</span> (+84)
-                    </span>
-                    <select className="country-code-select">
-                      <option value="+84"></option>
-                    </select>
                     <input
                       type="text"
-                      placeholder="Không có tìm kiếm nào gần đây"
+                      placeholder="Nhập số điện thoại để tìm kiếm"
                       value={friendSearchQuery}
                       onChange={(e) => setFriendSearchQuery(e.target.value)}
                     />
@@ -370,6 +382,21 @@ const MessagesTab = ({
                     {friendStatus === 'pending_sent' && (
                       <button className="add-friend-action-btn" disabled>
                         Đã gửi yêu cầu
+                      </button>
+                    )}
+                    {friendStatus === 'pending_received' && (
+                      <button className="add-friend-action-btn" disabled>
+                        Đang chờ bạn chấp nhận
+                      </button>
+                    )}
+                    {friendStatus === 'blocked' && (
+                      <button className="add-friend-action-btn" disabled>
+                        Đã bị chặn
+                      </button>
+                    )}
+                    {friendStatus === 'friend' && (
+                      <button className="add-friend-action-btn" disabled>
+                        Đã là bạn bè
                       </button>
                     )}
                     <button

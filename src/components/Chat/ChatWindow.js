@@ -87,6 +87,9 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         }
       } catch (error) {
         console.error('Error fetching friend status:', error);
+        alert(
+          'Không thể kiểm tra trạng thái bạn bè do lỗi hệ thống. Giả định đây là người lạ để bạn có thể gửi lời mời kết bạn.'
+        );
         setFriendStatus('stranger');
       }
     };
@@ -99,7 +102,6 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       setFriendStatus(null);
     }
 
-    // Khởi tạo socket cho namespace /group (chat nhóm) và /chat (chat cá nhân hoặc thu hồi tin nhắn)
     let groupSocket, chatSocket;
     try {
       if (chat.isGroup) {
@@ -114,12 +116,10 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       return;
     }
 
-    // Tham gia phòng của user hiện tại và phòng chat
     if (chat.isGroup) {
       groupSocket.emit('joinRoom', { room: `user:${currentUserId}` });
       groupSocket.emit('joinRoom', { room: `group:${chat.targetUserId}` });
 
-      // Lắng nghe tin nhắn nhóm mới (chỉ áp dụng cho người nhận, không người gửi)
       groupSocket.on('newGroupMessage', (data) => {
         console.log('Received new group message:', data);
         if (data.groupId === chat.targetUserId && data.message.senderId !== currentUserId) {
@@ -138,7 +138,6 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         }
       });
 
-      // Lắng nghe thu hồi tin nhắn nhóm
       chatSocket.on('messageRecalled', (data) => {
         console.log('Group message recalled:', data);
         setMessages((prev) => {
@@ -153,7 +152,6 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
     } else {
       chatSocket.emit('joinRoom', { room: `user:${currentUserId}` });
 
-      // Lắng nghe tin nhắn cá nhân (chỉ áp dụng cho người nhận)
       chatSocket.on('receiveMessage', (newMessage) => {
         console.log('Received message:', newMessage);
         if (
@@ -175,7 +173,6 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         }
       });
 
-      // Lắng nghe trạng thái tin nhắn cá nhân
       chatSocket.on('messageStatus', ({ messageId, status }) => {
         setMessages((prev) => {
           if (!Array.isArray(prev)) return prev;
@@ -185,7 +182,6 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         });
       });
 
-      // Lắng nghe thu hồi tin nhắn cá nhân
       chatSocket.on('messageRecalled', ({ messageId }) => {
         console.log('Message recalled:', { messageId });
         setMessages((prev) => {
@@ -196,7 +192,6 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         });
       });
 
-      // Lắng nghe xóa tin nhắn cá nhân
       chatSocket.on('messageDeleted', ({ messageId }) => {
         setMessages((prev) => {
           if (!Array.isArray(prev)) return prev;
@@ -307,7 +302,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
   const handleRecallMessage = async (messageId) => {
     let socket;
     try {
-      socket = getSocket('/chat'); // Sử dụng namespace /chat vì recallMessage nằm ở đây
+      socket = getSocket('/chat');
     } catch (error) {
       console.error('Socket not initialized for /chat:', error.message);
       alert('Không thể thu hồi tin nhắn. Vui lòng đăng nhập lại.');
@@ -331,7 +326,6 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
   };
 
   const handleDeleteMessage = async (messageId) => {
-    // Chỉ áp dụng cho chat cá nhân vì group.socket.js không hỗ trợ deleteGroupMessage
     if (chat.isGroup) {
       alert('Chức năng xóa tin nhắn nhóm hiện chưa được hỗ trợ.');
       return;
@@ -383,14 +377,18 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         { headers: { Authorization: `Bearer ${token.trim()}` } }
       );
 
-      if (response.data && response.data.message) {
+      if (response.data && response.data.success) {
         alert('Đã gửi yêu cầu kết bạn thành công!');
         setFriendStatus('pending_sent');
       } else {
-        alert('Không thể gửi yêu cầu kết bạn.');
+        alert('Không thể gửi yêu cầu kết bạn: ' + (response.data?.error || 'Phản hồi không hợp lệ từ server.'));
       }
     } catch (error) {
-      alert('Lỗi khi gửi yêu cầu kết bạn: ' + (error.response?.data?.error || error.message));
+      const errorMessage =
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        'Lỗi hệ thống khi gửi yêu cầu kết bạn. Vui lòng thử lại sau.';
+      alert('Lỗi khi gửi yêu cầu kết bạn: ' + errorMessage);
     }
   };
 
@@ -400,24 +398,38 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         headers: { Authorization: `Bearer ${token.trim()}` },
       });
 
+      if (!response.data || !Array.isArray(response.data)) {
+        alert('Không tìm thấy danh sách lời mời kết bạn.');
+        return;
+      }
+
       const request = response.data.find((req) => req.senderId === chat.targetUserId);
       if (!request) {
-        alert('Không tìm thấy lời mời kết bạn.');
+        alert('Không tìm thấy lời mời kết bạn từ người này.');
         return;
       }
 
       const acceptResponse = await axios.post(
         'http://localhost:3000/api/friends/accept',
-        { requestId: request.requestId },
-        { headers: { Authorization: `Bearer ${token.trim()}` } }
+        {},
+        {
+          headers: { Authorization: `Bearer ${token.trim()}` },
+          params: { requestId: request.requestId }, // Send requestId as query parameter
+        }
       );
 
-      if (acceptResponse.data && acceptResponse.data.message) {
+      if (acceptResponse.data && acceptResponse.data.success) {
         alert('Đã chấp nhận lời mời kết bạn!');
         setFriendStatus('friend');
+      } else {
+        alert('Không thể chấp nhận lời mời: ' + (acceptResponse.data?.message || 'Phản hồi không hợp lệ từ server.'));
       }
     } catch (error) {
-      alert('Lỗi khi chấp nhận lời mời: ' + (error.response?.data?.message || error.message));
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        'Lỗi hệ thống khi chấp nhận lời mời. Vui lòng thử lại sau.';
+      alert('Lỗi khi chấp nhận lời mời: ' + errorMessage);
     }
   };
 
@@ -471,11 +483,14 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
           )}
           {friendStatus === 'pending_received' && (
             <>
-              <p>Đang chờ được đồng ý kết bạn</p>
+              <p>Người này đã gửi lời mời kết bạn</p>
               <button className="accept-friend-btn-banner" onClick={handleAcceptRequest}>
                 Đồng ý
               </button>
             </>
+          )}
+          {friendStatus === 'blocked' && (
+            <p>Bạn đã chặn người này. Hãy bỏ chặn để nhắn tin.</p>
           )}
         </div>
       )}

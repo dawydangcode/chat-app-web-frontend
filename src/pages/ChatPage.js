@@ -4,8 +4,8 @@ import SidebarHeader from '../components/Chat/SidebarHeader';
 import ChatListHeader from '../components/Chat/ChatListHeader';
 import MessagesTab from '../components/Chat/MessageTab';
 import ChatWindow from '../components/Chat/ChatWindow';
-import IndividualConversationInfo from '../components/Chat/IndividualConversationInfo'; // Thêm import
-import GroupConversationInfo from '../components/Chat/GroupConversationInfo'; // Thêm import
+import IndividualConversationInfo from '../components/Chat/IndividualConversationInfo';
+import GroupConversationInfo from '../components/Chat/GroupConversationInfo';
 import SettingsTab from '../components/SettingTab';
 import ContactsTab from '../components/ContactsTab';
 import CreateGroupModal from '../components/CreateGroupModal';
@@ -349,11 +349,24 @@ const ChatPage = () => {
 
   const handleAcceptRequest = async (requestId) => {
     const token = localStorage.getItem('token');
+    if (!token || !token.startsWith('eyJ')) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+      return;
+    }
+    if (!requestId || !/^[0-9a-f-]{36}#\d+$/.test(requestId)) {
+      alert('requestId không hợp lệ.');
+      return;
+    }
     try {
       const response = await axios.post(
         'http://localhost:3000/api/friends/accept',
-        { requestId },
-        { headers: { Authorization: `Bearer ${token.trim()}` } },
+        {},
+        {
+          headers: { Authorization: `Bearer ${token.trim()}` },
+          params: { requestId }
+        }
       );
 
       if (response.data && response.data.message) {
@@ -372,7 +385,7 @@ const ChatPage = () => {
       const response = await axios.post(
         'http://localhost:3000/api/friends/reject',
         { requestId },
-        { headers: { Authorization: `Bearer ${token.trim()}` } },
+        { headers: { Authorization: `Bearer ${token.trim()}` } }
       );
 
       if (response.data && response.data.message) {
@@ -390,7 +403,7 @@ const ChatPage = () => {
       const response = await axios.post(
         'http://localhost:3000/api/friends/cancel',
         { requestId },
-        { headers: { Authorization: `Bearer ${token.trim()}` } },
+        { headers: { Authorization: `Bearer ${token.trim()}` } }
       );
 
       if (response.data && response.data.message) {
@@ -610,7 +623,6 @@ const ChatPage = () => {
         )}
       </div>
 
-      {/* Thêm div4 để hiển thị ConversationInfo bên phải div3 */}
       {isInfoVisible && activeTab === 'messages' && selectedChat && (
         <div className="div4">
           {selectedChat.isGroup ? (
