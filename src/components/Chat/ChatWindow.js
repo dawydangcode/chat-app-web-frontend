@@ -184,7 +184,6 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
               (msg) => msg.tempId === newMessage.messageId || msg.messageId === newMessage.messageId
             );
             if (existingMessageIndex !== -1) {
-              // Cập nhật tin nhắn tạm thời (pending) thành tin nhắn chính thức
               if (['sent', 'delivered', 'seen'].includes(newMessage.status)) {
                 const updatedMessages = prev.map((msg, index) =>
                   index === existingMessageIndex ? { ...newMessage, id: newMessage.messageId } : msg
@@ -195,7 +194,6 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
                 }));
                 return updatedMessages;
               } else {
-                // Nếu trạng thái không hợp lệ, xóa tin nhắn tạm thời
                 const updatedMessages = prev.filter((_, index) => index !== existingMessageIndex);
                 setMessageCache((prevCache) => ({
                   ...prevCache,
@@ -204,7 +202,6 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
                 return updatedMessages;
               }
             }
-            // Thêm tin nhắn mới nếu trạng thái hợp lệ
             if (['sent', 'delivered', 'seen'].includes(newMessage.status)) {
               const updatedMessages = [...prev, newMessage];
               setMessageCache((prevCache) => ({
@@ -306,7 +303,6 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       return;
     }
 
-    // Tạo tin nhắn tạm thời với trạng thái pending
     const tempId = uuidv4();
     const tempMessage = {
       tempId,
@@ -321,7 +317,6 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
       mimeType: data instanceof FormData ? data.get('mimeType') : null,
     };
 
-    // Thêm tin nhắn tạm thời vào danh sách
     setMessages((prev) => {
       if (!Array.isArray(prev)) return [tempMessage];
       const updatedMessages = [...prev, tempMessage];
@@ -353,8 +348,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
           console.log(`Received ${eventName} response:`, response);
           setMessages((prev) => {
             if (!Array.isArray(prev)) return prev;
-            if (response.success && ['sent', 'delivered', 'seen'].includes(response.data.status)) {
-              // Cập nhật tin nhắn tạm thời với dữ liệu từ server
+            if (response.success) {
               const updatedMessages = prev.map((msg) =>
                 msg.tempId === tempId ? { ...response.data, id: response.data.messageId } : msg
               );
@@ -364,13 +358,16 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
               }));
               return updatedMessages;
             } else {
-              // Xóa tin nhắn tạm thời nếu gửi thất bại
-              const updatedMessages = prev.filter((msg) => msg.tempId !== tempId);
+              const updatedMessages = prev.map((msg) =>
+                msg.tempId === tempId
+                  ? { ...msg, status: 'error', errorMessage: response.message || 'Gửi file thất bại' }
+                  : msg
+              );
               setMessageCache((prevCache) => ({
                 ...prevCache,
                 [chat.targetUserId]: updatedMessages,
               }));
-              alert(response.message || 'Tin nhắn chưa được gửi. Vui lòng thử lại.');
+              console.log('Error sending file:', response.message || 'Unknown error');
               return updatedMessages;
             }
           });
@@ -380,14 +377,18 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         console.error('Error sending file:', error);
         setMessages((prev) => {
           if (!Array.isArray(prev)) return prev;
-          const updatedMessages = prev.filter((msg) => msg.tempId !== tempId);
+          const updatedMessages = prev.map((msg) =>
+            msg.tempId === tempId
+              ? { ...msg, status: 'error', errorMessage: 'Không thể gửi file' }
+              : msg
+          );
           setMessageCache((prevCache) => ({
             ...prevCache,
             [chat.targetUserId]: updatedMessages,
           }));
+          console.log('Error sending file:', error.message);
           return updatedMessages;
         });
-        alert('Không thể gửi file. Vui lòng thử lại.');
         onComplete?.();
       }
     } else {
@@ -404,8 +405,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
         console.log(`Received ${eventName} response:`, response);
         setMessages((prev) => {
           if (!Array.isArray(prev)) return prev;
-          if (response.success && ['sent', 'delivered', 'seen'].includes(response.data.status)) {
-            // Cập nhật tin nhắn tạm thời với dữ liệu từ server
+          if (response.success) {
             const updatedMessages = prev.map((msg) =>
               msg.tempId === tempId ? { ...response.data, id: response.data.messageId } : msg
             );
@@ -415,13 +415,16 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible }) => {
             }));
             return updatedMessages;
           } else {
-            // Xóa tin nhắn tạm thời nếu gửi thất bại
-            const updatedMessages = prev.filter((msg) => msg.tempId !== tempId);
+            const updatedMessages = prev.map((msg) =>
+              msg.tempId === tempId
+                ? { ...msg, status: 'error', errorMessage: response.message || 'Gửi tin nhắn thất bại' }
+                : msg
+            );
             setMessageCache((prevCache) => ({
               ...prevCache,
               [chat.targetUserId]: updatedMessages,
             }));
-            alert(response.message || 'Tin nhắn chưa được gửi. Vui lòng thử lại.');
+            console.log('Error sending message:', response.message || 'Unknown error');
             return updatedMessages;
           }
         });

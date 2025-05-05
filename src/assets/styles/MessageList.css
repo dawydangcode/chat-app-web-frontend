@@ -9,14 +9,13 @@
 }
 
 .message {
-  margin: 10px;
-  padding: 10px;
+  margin: 8px 10px; /* Giảm margin trên/dưới để tin nhắn gần nhau hơn */
   border-radius: 8px;
-  max-width: 80%; /* Tăng max-width để chứa tin nhắn dài hơn */
+  max-width: 80%;
   display: flex;
   position: relative;
   box-sizing: border-box;
-  overflow: visible; /* Đảm bảo nội dung không bị ẩn */
+  overflow: visible;
 }
 
 .message-left {
@@ -32,17 +31,17 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-right: 10px;
+  margin-right: 8px; /* Giảm khoảng cách để giao diện gọn hơn */
 }
 
 .message-sender-info-placeholder {
   width: 40px;
-  margin-right: 10px;
+  margin-right: 8px;
 }
 
 .message-sender-avatar {
-  width: 30px;
-  height: 30px;
+  width: 32px; /* Tăng nhẹ kích thước avatar cho rõ ràng */
+  height: 32px;
   border-radius: 50%;
   object-fit: cover;
 }
@@ -52,7 +51,7 @@
   flex-direction: column;
   align-items: flex-start;
   position: relative;
-  width: 100%; /* Đảm bảo wrapper mở rộng để chứa nội dung */
+  width: 100%;
 }
 
 .message-right .message-content-wrapper {
@@ -60,14 +59,14 @@
 }
 
 .message-content {
-  max-width: 100%; /* Đảm bảo không vượt quá wrapper */
-  padding: 10px;
+  max-width: 100%;
+  padding: 8px 12px; /* Điều chỉnh padding cho cân đối */
   border-radius: 10px;
   position: relative;
   display: flex;
   flex-direction: column;
-  width: auto; /* Cho phép mở rộng theo nội dung */
-  word-break: break-word; /* Đảm bảo xuống dòng đúng */
+  width: auto;
+  word-break: break-word;
 }
 
 .message-left .message-content {
@@ -76,8 +75,9 @@
   font-size: .9375rem;
   font-weight: 400;
   line-height: 1.5;
-  width: auto; /* Cho phép mở rộng theo nội dung */
+  width: auto;
   box-sizing: border-box;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); /* Thêm bóng nhẹ để nổi bật */
 }
 
 .message-right .message-content {
@@ -87,13 +87,14 @@
   font-weight: 400;
   line-height: 1.5;
   margin-left: auto;
-  width: auto; /* Cho phép mở rộng theo nội dung */
+  width: auto;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .message p {
   margin: 0;
-  word-break: break-word; /* Đảm bảo văn bản dài xuống dòng */
-  white-space: pre-wrap; /* Giữ khoảng trắng và xuống dòng tự nhiên */
+  word-break: break-word;
+  white-space: pre-wrap;
 }
 
 .message span {
@@ -108,7 +109,8 @@
   font-size: .8125rem;
   font-weight: 500;
   line-height: 1.5;
-  margin-bottom: 5px;
+  margin-bottom: 4px; /* Giảm khoảng cách dưới tên */
+  align-self: flex-start; /* Căn trái tên người gửi */
 }
 
 .message-time {
@@ -116,8 +118,12 @@
   font-weight: 400;
   line-height: 1.5;
   color: #44546f;
-  margin-top: 5px;
+  margin-top: 4px;
   align-self: flex-start;
+}
+
+.message-right .message-time {
+  align-self: flex-end; /* Căn phải thời gian cho tin nhắn bên phải */
 }
 
 .message-status {

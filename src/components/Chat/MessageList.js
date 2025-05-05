@@ -109,7 +109,7 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
         const isSameSenderAsPrevious = prevGroup && (prevGroup.senderId === firstMessage.senderId || (prevGroup.type === 'image-group' && prevGroup.senderId === firstMessage.senderId));
         const isSameSenderAsNext = nextGroup && (nextGroup.senderId === lastMessage.senderId || (nextGroup.type === 'image-group' && nextGroup.senderId === lastMessage.senderId));
         const showTime = !isSameSenderAsNext || groupIndex === groupedMessages.length - 1;
-        const showAvatarAndName = !isCurrentUser && (!isSameSenderAsPrevious || groupIndex === 0);
+        const showAvatarAndName = !isCurrentUser && chat.isGroup && (!isSameSenderAsPrevious || groupIndex === 0);
         const isPending = ['pending', 'sending'].includes(firstMessage.status);
         const showStatus = !isSameSenderAsNext || groupIndex === groupedMessages.length - 1;
 
@@ -121,11 +121,7 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
             {showAvatarAndName && (
               <div className="message-sender-info">
                 <img
-                  src={
-                    chat?.isGroup
-                      ? firstMessage.sender?.avatar || '/assets/images/placeholder.png'
-                      : chat?.avatar || '/assets/images/placeholder.png'
-                  }
+                  src={firstMessage.sender?.avatar || '/assets/images/placeholder.png'}
                   alt="Sender Avatar"
                   className="message-sender-avatar"
                 />
@@ -142,7 +138,7 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                 </div>
               ) : (
                 <>
-                  {chat?.isGroup && showAvatarAndName && isGroupMessage && (
+                  {showAvatarAndName && (
                     <span className="message-sender-name">
                       {firstMessage.sender?.name || 'Không có tên'}
                     </span>
@@ -177,11 +173,6 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                     </div>
                   ) : (
                     <div className="message-content">
-                      {chat?.isGroup && showAvatarAndName && !isGroupMessage && (
-                        <span className="message-sender-name-inline">
-                          {firstMessage.sender?.name || 'Không có tên'}
-                        </span>
-                      )}
                       {firstMessage.type === 'text' && <p style={{ opacity: isPending ? 0.6 : 1 }}>{firstMessage.content}</p>}
                       {(firstMessage.type === 'video') && firstMessage.mediaUrl ? (
                         <div className="media-message-container">
