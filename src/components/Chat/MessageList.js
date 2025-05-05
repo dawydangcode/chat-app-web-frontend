@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import '../../assets/styles/ChatWindow.css';
 import '../../assets/styles/MessageList.css';
 import { FaUndo, FaTrash, FaShare } from 'react-icons/fa';
+import { LuCheckCheck } from 'react-icons/lu';
+import { LuCheck } from 'react-icons/lu';
 
 const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, onForwardMessage, chat }) => {
   const currentUserId = JSON.parse(localStorage.getItem('user') || '{}')?.userId;
@@ -109,6 +111,7 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
         const showTime = !isSameSenderAsNext || groupIndex === groupedMessages.length - 1;
         const showAvatarAndName = !isCurrentUser && (!isSameSenderAsPrevious || groupIndex === 0);
         const isPending = ['pending', 'sending'].includes(firstMessage.status);
+        const showStatus = !isSameSenderAsNext || groupIndex === groupedMessages.length - 1;
 
         return (
           <div
@@ -217,24 +220,36 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                       {firstMessage.status === 'error' && firstMessage.errorMessage && (
                         <p className="error-message">{firstMessage.errorMessage}</p>
                       )}
+                      {showTime && (
+                        <span className="message-time">
+                          {new Date(lastMessage.timestamp).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      )}
                     </div>
                   )}
                   <div className="message-meta">
-                    {showTime && (
-                      <span className="message-time">
-                        {new Date(lastMessage.timestamp).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </span>
-                    )}
-                    {isCurrentUser && !chat.isGroup && (
+                    {isCurrentUser && !chat.isGroup && showStatus && (
                       <span className={`message-status ${lastMessage.status}`}>
-                        {lastMessage.status === 'sent' && '✓'}
-                        {lastMessage.status === 'delivered' && '✓✓'}
+                        {lastMessage.status === 'sent' && (
+                          <>
+                            <span className="status-icon">✓</span> Đã gửi
+                          </>
+                        )}
+                        {lastMessage.status === 'delivered' && (
+                          <>
+                            <LuCheckCheck className="status-icon" /> Đã nhận
+                          </>
+                        )}
                         {lastMessage.status === 'seen' && 'Đã xem'}
                         {lastMessage.status === 'error' && 'Lỗi'}
-                        {isPending && <span className="pending-text">Đang gửi</span>}
+                        {isPending && (
+                          <span className="pending-text">
+                            <LuCheck className="status-icon" /> Đang gửi
+                          </span>
+                        )}
                       </span>
                     )}
                   </div>

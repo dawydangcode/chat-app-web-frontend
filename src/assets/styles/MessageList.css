@@ -4,20 +4,19 @@
   overflow-x: hidden;
   padding: 10px;
   font-family: SegoeuiPc, Segoe UI, San Francisco, Helvetica Neue, Helvetica, Lucida Grande, Roboto, Ubuntu, Tahoma, Microsoft Sans Serif, Arial, sans-serif;
-  display: block; /* Đảm bảo message-list không phải là flex container */
-  width: 100%; /* Đảm bảo chiều rộng đầy đủ */
+  display: block;
+  width: 100%;
 }
 
 .message {
   margin: 10px;
   padding: 10px;
   border-radius: 8px;
-  max-width: 70%;
+  max-width: 80%; /* Tăng max-width để chứa tin nhắn dài hơn */
   display: flex;
   position: relative;
   box-sizing: border-box;
-
-  overflow: hidden; /* Cắt bỏ phần vượt ra ngoài */
+  overflow: visible; /* Đảm bảo nội dung không bị ẩn */
 }
 
 .message-left {
@@ -26,7 +25,7 @@
 
 .message-right {
   justify-content: flex-end;
-  margin-left: auto; /* Thay vì margin-left: 300px */
+  margin-left: auto;
 }
 
 .message-sender-info {
@@ -53,6 +52,7 @@
   flex-direction: column;
   align-items: flex-start;
   position: relative;
+  width: 100%; /* Đảm bảo wrapper mở rộng để chứa nội dung */
 }
 
 .message-right .message-content-wrapper {
@@ -60,22 +60,24 @@
 }
 
 .message-content {
-  max-width: 100%;
+  max-width: 100%; /* Đảm bảo không vượt quá wrapper */
   padding: 10px;
   border-radius: 10px;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  width: auto; /* Cho phép mở rộng theo nội dung */
+  word-break: break-word; /* Đảm bảo xuống dòng đúng */
 }
 
 .message-left .message-content {
-  display: flex;
   background-color: #ffffff;
   color: #081b3a;
   font-size: .9375rem;
   font-weight: 400;
   line-height: 1.5;
-  width: 100%; /* Đổi từ width: auto thành width: 100% để giới hạn */
+  width: auto; /* Cho phép mở rộng theo nội dung */
   box-sizing: border-box;
-  
 }
 
 .message-right .message-content {
@@ -85,11 +87,13 @@
   font-weight: 400;
   line-height: 1.5;
   margin-left: auto;
+  width: auto; /* Cho phép mở rộng theo nội dung */
 }
 
 .message p {
   margin: 0;
-  word-wrap: break-word;
+  word-break: break-word; /* Đảm bảo văn bản dài xuống dòng */
+  white-space: pre-wrap; /* Giữ khoảng trắng và xuống dòng tự nhiên */
 }
 
 .message span {
@@ -113,12 +117,20 @@
   line-height: 1.5;
   color: #44546f;
   margin-top: 5px;
+  align-self: flex-start;
 }
 
 .message-status {
   font-size: 0.75em;
   color: #888;
   margin-left: 5px;
+  display: flex;
+  align-items: center;
+}
+
+.status-icon {
+  font-size: 0.9em;
+  margin-right: 3px;
 }
 
 .message-actions {
@@ -176,11 +188,12 @@
   display: flex;
   flex-wrap: wrap;
   gap: 3px;
-  max-width: 309px; /* 3 ảnh x (100px + 3px gap) */
+  max-width: 309px;
 }
 
 .media-message-container {
   flex: 0 0 auto;
+  position: relative;
 }
 
 .media-message-container img,
@@ -189,7 +202,6 @@
   object-fit: cover;
 }
 
-/* Điều chỉnh kích thước ảnh dựa trên số lượng ảnh trong nhóm */
 .media-message-group:has(> :nth-child(1):last-child) .media-message-container img {
   width: 200px;
   height: 200px;
@@ -205,13 +217,11 @@
   height: 120px;
 }
 
-/* Trường hợp 4 ảnh: 1 dòng 4 ảnh */
 .media-message-group:has(> :nth-child(4):last-child) .media-message-container img {
   width: 75px;
   height: 75px;
 }
 
-/* Trường hợp 5 ảnh: Dòng đầu 3 ảnh, dòng sau 2 ảnh */
 .media-message-group:has(> :nth-child(5):last-child) .media-message-container:nth-child(-n+3) img {
   width: 100px;
   height: 100px;
@@ -222,17 +232,15 @@
 }
 
 .media-message-group:has(> :nth-child(5):last-child) .media-message-container:nth-child(n+4) img {
-  width: 150px; /* Chia đều không gian cho 2 ảnh */
+  width: 150px;
   height: 150px;
 }
 
-/* Trường hợp 6 ảnh trở lên: 2 dòng 3:3 */
 .media-message-group:has(> :nth-child(6)) .media-message-container img {
   width: 100px;
   height: 100px;
 }
 
-/* Video giữ kích thước mặc định */
 .media-message-container video {
   width: 100%;
   height: auto;
@@ -444,4 +452,53 @@
   font-size: 12px;
   color: #888;
   margin-left: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.media-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.media-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+}
+
+.media-loading-spinner {
+  color: #fff;
+  font-size: 20px;
+  animation: spin 1s linear infinite;
+}
+
+.media-placeholder {
+  width: 200px;
+  height: 200px;
+  background-color: #f0f0f0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #888;
+  font-size: 14px;
+  text-align: center;
+}
+
+.media-blur {
+  filter: blur(5px);
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
