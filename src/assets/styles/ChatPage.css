@@ -211,7 +211,8 @@ body {
 }
 
 .unread-badge {
-  background-color: #2196f3;
+  position: absolute;
+  background-color: #cd171b;
   color: white;
   border-radius: 50%;
   width: 20px;
@@ -220,6 +221,7 @@ body {
   justify-content: center;
   align-items: center;
   font-size: 10px;
+  margin-left: 240px;
 }
 
 .no-chats {
@@ -763,13 +765,16 @@ body {
 
 /* Viền đậm cho cuộc hội thoại có tin nhắn mới */
 .chat-item.new-message-highlight {
-  border: 2px solid #ff4444; /* Viền đậm màu đỏ khi có tin nhắn mới */
-  border-radius: 8px;
-  transition: border 0.3s ease;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  border-bottom: 1px solid #ddd;
+  cursor: pointer;
 }
 
 .chat-item.new-message-highlight:hover {
-  border-color: #ff6666;
+  background-color: #e6f0ff; /* Màu nền xanh nhạt khi có tin nhắn mới */
 }
 
 /* Làm nổi bật cuộc hội thoại đang được chọn */

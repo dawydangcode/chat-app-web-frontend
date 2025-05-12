@@ -543,6 +543,13 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
     setIsCreateGroupModalOpen(false);
   };
 
+  // Đảm bảo chat có các thuộc tính cần thiết
+  const normalizedChat = {
+    ...chat,
+    userId: chat?.isGroup ? null : chat?.targetUserId,
+    groupId: chat?.isGroup ? chat?.targetUserId : null,
+  };
+
   return (
     <div className="chat-window">
       <div className="chat-header">
@@ -597,9 +604,9 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
         onRecallMessage={handleRecallMessage}
         onDeleteMessage={handleDeleteMessage}
         onForwardMessage={handleForwardMessage}
-        chat={chat}
+        chat={normalizedChat}
       />
-      <MessageInput onSendMessage={handleSendMessage} chat={chat} />
+      <MessageInput onSendMessage={handleSendMessage} chat={normalizedChat} />
 
       <CreateGroupModal
         isOpen={isCreateGroupModalOpen}
