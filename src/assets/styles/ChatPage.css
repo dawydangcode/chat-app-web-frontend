@@ -175,10 +175,11 @@ body {
   display: flex;
   align-items: center;
   padding: 10px;
-  border-bottom: 1px solid #ddd;
   cursor: pointer;
 }
-
+.chat-item:hover {
+  background-color: #f1f2f4;
+}
 .chat-item.unread {
   background-color: #e0f7fa;
 }
@@ -195,8 +196,10 @@ body {
 }
 
 .chat-name {
-  font-weight: bold;
-  margin: 0;
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.5;
+  color: #081b3a;
 }
 
 .last-message {
@@ -779,7 +782,6 @@ body {
 
 /* Làm nổi bật cuộc hội thoại đang được chọn */
 .chat-item.selected-chat {
-  background-color: #e6f0ff; /* Màu nền xanh nhạt khi được chọn */
-  border-radius: 8px;
+  background-color: #e5f1ff; /* Màu nền xanh nhạt khi được chọn */
   transition: background-color 0.3s ease;
 }

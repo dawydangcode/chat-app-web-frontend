@@ -7,7 +7,7 @@ import '../../assets/styles/ChatWindow.css';
 import { useNavigate } from 'react-router-dom';
 import { VscLayoutSidebarRightOff } from 'react-icons/vsc';
 import { AiOutlineUsergroupAdd } from 'react-icons/ai';
-import { initializeSocket, getSocket } from '../../utils/socket';
+import { getSocket } from '../../utils/socket';
 import { v4 as uuidv4 } from 'uuid';
 
 const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unreadCounts }) => {
@@ -31,7 +31,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
 
     const fetchMessages = async (forceFetch = false) => {
       const shouldForceFetch = forceFetch || newMessageHighlights.has(chat.targetUserId) || (unreadCounts[chat.targetUserId] > 0);
-      
+
       if (!shouldForceFetch && messageCache[chat.targetUserId]) {
         setMessages(messageCache[chat.targetUserId]);
         return;
@@ -133,11 +133,16 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
       }
     };
 
-    // Khởi tạo hoặc lấy socket
     if (!chatSocketRef.current) {
       try {
         chatSocketRef.current = getSocket('/chat');
         console.log('Chat Socket initialized:', chatSocketRef.current.id);
+        chatSocketRef.current.on('connect', () => {
+          console.log('Chat Socket connected:', chatSocketRef.current.id);
+        });
+        chatSocketRef.current.on('connect_error', (error) => {
+          console.error('Chat Socket connection error:', error);
+        });
       } catch (error) {
         console.error('Socket not initialized:', error.message);
         navigate('/login');
@@ -149,6 +154,12 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
       try {
         groupSocketRef.current = getSocket('/group');
         console.log('Group Socket initialized:', groupSocketRef.current.id);
+        groupSocketRef.current.on('connect', () => {
+          console.log('Group Socket connected:', groupSocketRef.current.id);
+        });
+        groupSocketRef.current.on('connect_error', (error) => {
+          console.error('Group Socket connection error:', error);
+        });
       } catch (error) {
         console.error('Socket not initialized:', error.message);
         navigate('/login');
@@ -156,17 +167,18 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
       }
     }
 
-    // Tham gia room mới khi thay đổi chat
     if (chatSocketRef.current) {
       chatSocketRef.current.emit('joinRoom', { room: `user:${currentUserId}` });
       if (chat.isGroup && groupSocketRef.current) {
         groupSocketRef.current.emit('joinRoom', { room: `group:${chat.targetUserId}` });
       } else if (chat.targetUserId) {
         chatSocketRef.current.emit('joinRoom', { room: `user:${chat.targetUserId}` });
+        const conversationRoom = `conversation:${[currentUserId, chat.targetUserId].sort().join(':')}`;
+        chatSocketRef.current.emit('joinRoom', { room: conversationRoom });
+        console.log('Joined conversation room:', conversationRoom);
       }
     }
 
-    // Lắng nghe sự kiện
     const handleReceiveMessage = (newMessage) => {
       if (
         (newMessage.senderId === chat.targetUserId || newMessage.receiverId === chat.targetUserId) &&
@@ -238,18 +250,77 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
       });
     };
 
+    const handleMessagePinned = async (data) => {
+      console.log('Received messagePinned event in ChatWindow:', data);
+      try {
+        const otherUserId = chat.isGroup ? chat.groupId : chat.userId;
+        const response = await axios.get(`http://localhost:3000/api/messages/pinned/${otherUserId}`, {
+          headers: { Authorization: `Bearer ${token.trim()}` },
+        });
+
+        if (response.data.success) {
+          const sortedMessages = (response.data.messages || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+          setMessages((prev) => {
+            const updatedMessages = [...prev];
+            setMessageCache((prevCache) => ({
+              ...prevCache,
+              [chat.targetUserId]: updatedMessages,
+            }));
+            return updatedMessages;
+          });
+          setMessages((prev) => [...prev]);
+        } else {
+          console.error('Không thể lấy tin nhắn ghim:', response.data.message);
+        }
+      } catch (error) {
+        console.error('Lỗi khi cập nhật tin nhắn ghim qua socket:', error);
+      }
+    };
+
+    const handleMessageUnpinned = async (data) => {
+      console.log('Received messageUnpinned event in ChatWindow:', data);
+      try {
+        const otherUserId = chat.isGroup ? chat.groupId : chat.userId;
+        const response = await axios.get(`http://localhost:3000/api/messages/pinned/${otherUserId}`, {
+          headers: { Authorization: `Bearer ${token.trim()}` },
+        });
+
+        if (response.data.success) {
+          const sortedMessages = (response.data.messages || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+          setMessages((prev) => {
+            const updatedMessages = [...prev];
+            setMessageCache((prevCache) => ({
+              ...prevCache,
+              [chat.targetUserId]: updatedMessages,
+            }));
+            return updatedMessages;
+          });
+          setMessages((prev) => [...prev]);
+        } else {
+          console.error('Không thể lấy tin nhắn ghim:', response.data.message);
+        }
+      } catch (error) {
+        console.error('Lỗi khi cập nhật tin nhắn ghim qua socket:', error);
+      }
+    };
+
     if (chatSocketRef.current) {
       chatSocketRef.current.on('receiveMessage', handleReceiveMessage);
       chatSocketRef.current.on('messageStatus', handleMessageStatus);
       chatSocketRef.current.on('messageRecalled', handleMessageRecalled);
       chatSocketRef.current.on('messageDeleted', handleMessageDeleted);
+      if (!chat.isGroup) {
+        chatSocketRef.current.on('messagePinned', handleMessagePinned);
+        chatSocketRef.current.on('messageUnpinned', handleMessageUnpinned);
+      }
     }
 
     if (chat.isGroup && groupSocketRef.current) {
       groupSocketRef.current.on('newGroupMessage', handleReceiveMessage);
+      groupSocketRef.current.on('messagePinned', handleMessagePinned);
+      groupSocketRef.current.on('messageUnpinned', handleMessageUnpinned);
     }
 
-    // Fetch data
     fetchMessages(true);
     fetchRecentChats();
     if (!chat?.isGroup) {
@@ -259,16 +330,21 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
     }
     markMessagesAsSeen();
 
-    // Cleanup
     return () => {
       if (chatSocketRef.current) {
         chatSocketRef.current.off('receiveMessage', handleReceiveMessage);
         chatSocketRef.current.off('messageStatus', handleMessageStatus);
         chatSocketRef.current.off('messageRecalled', handleMessageRecalled);
         chatSocketRef.current.off('messageDeleted', handleMessageDeleted);
+        if (!chat.isGroup) {
+          chatSocketRef.current.off('messagePinned', handleMessagePinned);
+          chatSocketRef.current.off('messageUnpinned', handleMessageUnpinned);
+        }
       }
       if (chat.isGroup && groupSocketRef.current) {
         groupSocketRef.current.off('newGroupMessage', handleReceiveMessage);
+        groupSocketRef.current.off('messagePinned', handleMessagePinned);
+        groupSocketRef.current.off('messageUnpinned', handleMessageUnpinned);
       }
     };
   }, [chat, currentUserId, token, navigate, newMessageHighlights, unreadCounts]);
@@ -543,11 +619,11 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
     setIsCreateGroupModalOpen(false);
   };
 
-  // Đảm bảo chat có các thuộc tính cần thiết
   const normalizedChat = {
     ...chat,
     userId: chat?.isGroup ? null : chat?.targetUserId,
     groupId: chat?.isGroup ? chat?.targetUserId : null,
+    isGroup: !!chat?.isGroup, // Đảm bảo isGroup luôn là boolean
   };
 
   return (
@@ -605,6 +681,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
         onDeleteMessage={handleDeleteMessage}
         onForwardMessage={handleForwardMessage}
         chat={normalizedChat}
+        socket={chat.isGroup ? groupSocketRef.current : chatSocketRef.current}
       />
       <MessageInput onSendMessage={handleSendMessage} chat={normalizedChat} />
 

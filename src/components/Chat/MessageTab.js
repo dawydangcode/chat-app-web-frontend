@@ -35,6 +35,7 @@ const MessagesTab = ({
   setNewMessageHighlights,
   unreadCounts,
   setUnreadCounts,
+  selectedChat, // Đảm bảo prop này được nhận
 }) => {
   const [chats, setChats] = useState([]);
   const [friendSearchQuery, setFriendSearchQuery] = useState('');
@@ -148,6 +149,8 @@ const MessagesTab = ({
       const newMessage = data.message || data;
       const conversationId = newMessage.senderId === currentUserId ? newMessage.receiverId : newMessage.senderId;
 
+      console.log('Received message:', { conversationId, selectedChatId: selectedChat?.id });
+
       setChats((prevChats) =>
         prevChats.map((chat) =>
           chat.id === conversationId
@@ -160,7 +163,9 @@ const MessagesTab = ({
         )
       );
 
-      if (newMessage.senderId !== currentUserId) {
+      // Chỉ cập nhật thông báo nếu tin nhắn không thuộc đoạn chat hiện tại
+      if (newMessage.senderId !== currentUserId && conversationId !== selectedChat?.id) {
+        console.log('Adding notification for:', { conversationId });
         setNewMessageHighlights((prev) => {
           const newSet = new Set(prev);
           newSet.add(conversationId);
@@ -189,15 +194,19 @@ const MessagesTab = ({
           )
         );
 
-        setNewMessageHighlights((prev) => {
-          const newSet = new Set(prev);
-          newSet.add(groupId);
-          return newSet;
-        });
-        setUnreadCounts((prev) => ({
-          ...prev,
-          [groupId]: (prev[groupId] || 0) + 1,
-        }));
+        // Chỉ cập nhật thông báo nếu tin nhắn không thuộc đoạn chat hiện tại
+        if (groupId !== selectedChat?.id) {
+          console.log('Adding group notification for:', { groupId });
+          setNewMessageHighlights((prev) => {
+            const newSet = new Set(prev);
+            newSet.add(groupId);
+            return newSet;
+          });
+          setUnreadCounts((prev) => ({
+            ...prev,
+            [groupId]: (prev[groupId] || 0) + 1,
+          }));
+        }
       }
     }, 100);
 
@@ -211,7 +220,7 @@ const MessagesTab = ({
       chatSocket.off('receiveMessage', handleReceiveMessage);
       groupSocket.off('newGroupMessage', handleNewGroupMessage);
     };
-  }, [currentUserId, navigate]);
+  }, [currentUserId, navigate, selectedChat]);
 
   useEffect(() => {
     if (foundUser && friendStatus === 'stranger') {
@@ -369,7 +378,6 @@ const MessagesTab = ({
       );
 
       if (response.data.success) {
-        // No state updates here; handled in handleSelectChat
         console.log(`Messages marked as seen for chat ${chatId}`);
       }
     } catch (error) {
@@ -410,7 +418,9 @@ const MessagesTab = ({
                 key={chat.id}
                 className={`chat-item ${chat.isPinned ? 'pinned' : ''} ${
                   newMessageHighlights.has(chat.id) ? 'new-message-highlight' : ''
-                } ${unreadCounts[chat.id] > 0 ? 'unread' : ''}`}
+                } ${unreadCounts[chat.id] > 0 ? 'unread' : ''} ${
+                  selectedChat?.id === chat.id ? 'selected-chat' : ''
+                }`}
                 onClick={() => handleSelectChat(chat)}
               >
                 <img

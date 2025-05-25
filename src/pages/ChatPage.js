@@ -30,7 +30,6 @@ const ChatPage = () => {
   const [isAddFriendModalOpen, setIsAddFriendModalOpen] = useState(false);
   const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
   const [groups, setGroups] = useState([]);
-  // Add states for new message highlights and unread counts
   const [newMessageHighlights, setNewMessageHighlights] = useState(new Set());
   const [unreadCounts, setUnreadCounts] = useState({});
 
@@ -473,6 +472,7 @@ const ChatPage = () => {
               setNewMessageHighlights={setNewMessageHighlights}
               unreadCounts={unreadCounts}
               setUnreadCounts={setUnreadCounts}
+              selectedChat={selectedChat} // Thêm prop này
             />
           )}
           {activeTab === 'contacts' && (

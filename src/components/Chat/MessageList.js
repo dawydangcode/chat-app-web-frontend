@@ -1,26 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
 import '../../assets/styles/ChatWindow.css';
 import '../../assets/styles/MessageList.css';
-import { FaUndo, FaTrash, FaShare, FaReply, FaCopy, FaThumbtack } from 'react-icons/fa';
+import { FaUndo, FaTrash, FaShare, FaReply, FaCopy, FaThumbtack, FaChevronUp, FaChevronDown, FaEllipsisH } from 'react-icons/fa';
+import { BiMessageRoundedDetail } from "react-icons/bi";
 import { LuCheckCheck, LuCheck } from 'react-icons/lu';
-import { getSocket } from '../../utils/socket';
+import { IoChevronDownSharp } from "react-icons/io5";
 
-const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, onForwardMessage, chat }) => {
+const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, onForwardMessage, chat, socket }) => {
   const currentUserId = JSON.parse(localStorage.getItem('user') || '{}')?.userId;
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [messageToDelete, setMessageToDelete] = useState(null);
   const [fullscreenMedia, setFullscreenMedia] = useState(null);
   const [mediaLoadError, setMediaLoadError] = useState(null);
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, message: null });
-  const [pinnedMessages, setPinnedMessages] = useState([]); // State để lưu tin nhắn ghim
-  const [showPinnedList, setShowPinnedList] = useState(false); // State để điều khiển hiển thị danh sách tin nhắn ghim
+  const [pinnedMessages, setPinnedMessages] = useState([]);
+  const [showPinnedList, setShowPinnedList] = useState(false);
+  const [pinnedContextMenu, setPinnedContextMenu] = useState({ visible: false, message: null, messageIndex: null });
+  const [showUnpinModal, setShowUnpinModal] = useState(false);
+  const [messageToUnpin, setMessageToUnpin] = useState(null);
   const messageListRef = useRef(null);
-  const socketRef = useRef(null);
-
-  // Khởi tạo socket
-  useEffect(() => {
-    socketRef.current = chat?.isGroup ? getSocket('/group') : getSocket('/chat');
-  }, [chat]);
 
   // Lấy danh sách tin nhắn ghim khi component mount hoặc chat thay đổi
   useEffect(() => {
@@ -45,10 +43,9 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
 
         const result = await response.json();
         if (result.success) {
-          // Sắp xếp tin nhắn ghim theo timestamp giảm dần (mới nhất trước)
           const sortedMessages = (result.messages || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
           setPinnedMessages(sortedMessages);
-          console.log('Fetched pinned messages:', sortedMessages); // Log để debug
+          console.log('Fetched pinned messages:', sortedMessages);
         } else {
           console.error('Không thể lấy tin nhắn ghim:', result.message);
           setPinnedMessages([]);
@@ -62,13 +59,18 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
     fetchPinnedMessages();
   }, [chat]);
 
-  // Lắng nghe sự kiện ghim tin nhắn qua socket
+  // Lắng nghe sự kiện ghim và bỏ ghim tin nhắn qua socket
   useEffect(() => {
-    if (!chat || !socketRef.current) return;
+    if (!chat || !socket) return;
 
-    const handlePinnedMessageUpdate = async () => {
+    const otherUserId = chat.isGroup ? chat.groupId : chat.userId;
+    const conversationRoom = `conversation:${[currentUserId, otherUserId].sort().join(':')}`;
+    console.log('Listening for pinned messages in room:', conversationRoom);
+
+    const handlePinnedMessageUpdate = async (data) => {
+      console.log('Received messagePinned/messageUnpinned event:', data);
       try {
-        const otherUserId = chat.isGroup ? chat.groupId : chat.userId;
+        const { messageId } = data;
         const response = await fetch(`http://localhost:3000/api/messages/pinned/${otherUserId}`, {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('token')}`,
@@ -76,27 +78,30 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
         });
 
         if (!response.ok) {
-          throw new Error(`HTTP error! Status: ${response.ok}`);
+          throw new Error(`HTTP error! Status: ${response.status}`);
         }
 
         const result = await response.json();
         if (result.success) {
-          // Sắp xếp lại tin nhắn ghim
           const sortedMessages = (result.messages || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
           setPinnedMessages(sortedMessages);
-          console.log('Updated pinned messages:', sortedMessages); // Log để debug
+          console.log('Updated pinned messages:', sortedMessages);
+        } else {
+          console.error('Không thể lấy tin nhắn ghim:', result.message);
         }
       } catch (error) {
         console.error('Lỗi khi cập nhật tin nhắn ghim qua socket:', error);
       }
     };
 
-    socketRef.current.on('messagePinned', handlePinnedMessageUpdate);
+    socket.on('messagePinned', handlePinnedMessageUpdate);
+    socket.on('messageUnpinned', handlePinnedMessageUpdate);
 
     return () => {
-      socketRef.current.off('messagePinned', handlePinnedMessageUpdate);
+      socket.off('messagePinned', handlePinnedMessageUpdate);
+      socket.off('messageUnpinned', handlePinnedMessageUpdate);
     };
-  }, [chat]);
+  }, [chat, socket]);
 
   useEffect(() => {
     if (messageListRef.current) {
@@ -107,6 +112,7 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
   useEffect(() => {
     const handleClickOutside = () => {
       setContextMenu({ visible: false, x: 0, y: 0, message: null });
+      setPinnedContextMenu({ visible: false, message: null, messageIndex: null });
     };
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
@@ -156,6 +162,16 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
     });
   };
 
+  const handlePinnedContextMenu = (e, message, messageIndex) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setPinnedContextMenu({
+      visible: true,
+      message,
+      messageIndex,
+    });
+  };
+
   const handleContextMenuAction = (action) => {
     const { message } = contextMenu;
     if (!message) return;
@@ -190,47 +206,144 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
     setContextMenu({ visible: false, x: 0, y: 0, message: null });
   };
 
+  const handlePinnedContextMenuAction = (action) => {
+    const { message } = pinnedContextMenu;
+    if (!message) return;
+
+    switch (action) {
+      case 'copy':
+        navigator.clipboard.writeText(message.content || '');
+        break;
+      case 'unpin':
+        setMessageToUnpin(message);
+        setShowUnpinModal(true);
+        break;
+      default:
+        break;
+    }
+    setPinnedContextMenu({ visible: false, message: null, messageIndex: null });
+  };
+
   const handlePinMessage = async (messageId) => {
-    try {
-      const response = await fetch(`http://localhost:3000/api/messages/pin/${messageId}`, {
-        method: 'PATCH',
+  try {
+    const isGroupChat = chat?.isGroup;
+    const endpoint = isGroupChat
+      ? `http://localhost:3000/api/groups/pin/messages/${chat.groupId}/${messageId}`
+      : `http://localhost:3000/api/messages/pin/${messageId}`;
+    const method = isGroupChat ? 'PUT' : 'PATCH';
+
+    const response = await fetch(endpoint, {
+      method,
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    if (result.success) {
+      const otherUserId = chat?.isGroup ? chat.groupId : chat?.userId;
+      const pinnedResponse = await fetch(`http://localhost:3000/api/messages/pinned/${otherUserId}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`,
         },
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
+      if (!pinnedResponse.ok) {
+        throw new Error(`HTTP error! Status: ${pinnedResponse.status}`);
       }
 
-      const result = await response.json();
-      if (result.success) {
-        const otherUserId = chat?.isGroup ? chat.groupId : chat?.userId;
-        const pinnedResponse = await fetch(`http://localhost:3000/api/messages/pinned/${otherUserId}`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-          },
-        });
-
-        if (!pinnedResponse.ok) {
-          throw new Error(`HTTP error! Status: ${pinnedResponse.status}`);
-        }
-
-        const pinnedResult = await pinnedResponse.json();
-        if (pinnedResult.success) {
-          const sortedMessages = (pinnedResult.messages || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-          setPinnedMessages(sortedMessages);
-          socketRef.current.emit('messagePinned', { room: chat.isGroup ? `group:${chat.groupId}` : `user:${chat.userId}` });
-        } else {
-          alert('Không thể lấy danh sách tin nhắn ghim mới: ' + pinnedResult.message);
-        }
+      const pinnedResult = await pinnedResponse.json();
+      if (pinnedResult.success) {
+        const sortedMessages = (pinnedResult.messages || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        setPinnedMessages(sortedMessages);
       } else {
-        alert('Không thể ghim tin nhắn: ' + result.message);
+        alert('Không thể lấy danh sách tin nhắn ghim mới: ' + pinnedResult.message);
       }
-    } catch (error) {
-      console.error('Lỗi khi ghim tin nhắn:', error);
-      alert('Đã xảy ra lỗi khi ghim tin nhắn. Vui lòng thử lại sau.');
+    } else {
+      alert('Không thể ghim tin nhắn: ' + result.message);
     }
+  } catch (error) {
+    console.error('Lỗi khi ghim tin nhắn:', error);
+    alert('Đã xảy ra lỗi khi ghim tin nhắn. Vui lòng thử lại sau.');
+  }
+};
+
+  const handleUnpinMessage = async () => {
+  if (!messageToUnpin) return;
+
+  try {
+    const isGroupChat = chat?.isGroup;
+    if (!isGroupChat && !chat?.userId) {
+      console.error('Invalid chat configuration:', chat);
+      alert('Cấu hình chat không hợp lệ. Vui lòng thử lại.');
+      return;
+    }
+    if (isGroupChat && !chat?.groupId) {
+      console.error('Missing groupId for group chat:', chat);
+      alert('Không tìm thấy ID nhóm. Vui lòng thử lại.');
+      return;
+    }
+
+    const messageId = messageToUnpin.id || messageToUnpin.messageId;
+    const endpoint = isGroupChat
+      ? `http://localhost:3000/api/groups/pin/messages/${chat.groupId}/${messageId}`
+      : `http://localhost:3000/api/messages/pin/${messageId}`;
+
+    console.log('Calling unpin endpoint:', endpoint);
+
+    const response = await fetch(endpoint, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Unpin error response:', errorData);
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    if (result.success) {
+      const otherUserId = isGroupChat ? chat.groupId : chat.userId;
+      const pinnedResponse = await fetch(`http://localhost:3000/api/messages/pinned/${otherUserId}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+
+      if (!pinnedResponse.ok) {
+        throw new Error(`HTTP error! Status: ${pinnedResponse.status}`);
+      }
+
+      const pinnedResult = await pinnedResponse.json();
+      if (pinnedResult.success) {
+        const sortedMessages = (pinnedResult.messages || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        setPinnedMessages(sortedMessages);
+      } else {
+        alert('Không thể lấy danh sách tin nhắn ghim mới: ' + pinnedResult.message);
+      }
+    } else {
+      alert('Không thể bỏ ghim tin nhắn: ' + result.message);
+    }
+  } catch (error) {
+    console.error('Lỗi khi bỏ ghim tin nhắn:', error);
+    alert('Đã xảy ra lỗi khi bỏ ghim tin nhắn. Vui lòng thử lại sau.');
+  }
+
+  setShowUnpinModal(false);
+  setMessageToUnpin(null);
+};
+
+  const cancelUnpin = () => {
+    setShowUnpinModal(false);
+    setMessageToUnpin(null);
   };
 
   if (!Array.isArray(messages)) {
@@ -282,34 +395,103 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
       <div className="pinned-messages-container">
         {pinnedMessages.length > 0 ? (
           <>
-            {/* Chỉ hiển thị tin nhắn ghim mới nhất (index 0 sau khi sắp xếp) */}
-            <div className="pinned-message">
-              <span className="pinned-message-sender">
-                {pinnedMessages[0].sender?.name || (chat?.isGroup ? 'Thành viên nhóm' : chat?.name || 'Không xác định')}
-              </span>
-              <span className="pinned-message-content">
-                {pinnedMessages[0].type === 'text' ? pinnedMessages[0].content : `(${pinnedMessages[0].type})`}
-              </span>
-              {pinnedMessages.length > 1 && (
-                <button
-                  className="pinned-messages-toggle"
-                  onClick={() => setShowPinnedList(!showPinnedList)}
-                >
-                  +{pinnedMessages.length - 1} ghim
-                </button>
-              )}
-            </div>
-            {/* Khi nhấn nút, hiển thị tất cả tin nhắn ghim */}
-            {showPinnedList && pinnedMessages.length > 1 && (
+            {/* Hiển thị tin nhắn ghim mới nhất hoặc danh sách tin nhắn ghim */}
+            {!showPinnedList ? (
+              <div className="pinned-message">
+                <div className="pinned-message-left">
+                  <BiMessageRoundedDetail className="pinned-message-icon" />
+                  <div className="pinned-message-text">
+                    <div className="pinned-message-label">Tin nhắn</div>
+                    <div className="pinned-message-details">
+                      <span className="pinned-message-sender">
+                        {pinnedMessages[0].sender?.name || (chat?.isGroup ? 'Thành viên nhóm' : chat?.name || 'Không xác định')}:
+                      </span>
+                      <span className="pinned-message-content">
+                        {pinnedMessages[0].type === 'text' ? pinnedMessages[0].content : `(${pinnedMessages[0].type})`}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="pinned-message-right">
+                  {pinnedMessages.length > 1 && (
+                    <button
+                      className="pinned-messages-toggle"
+                      onClick={() => setShowPinnedList(true)}
+                    >
+                      +{pinnedMessages.length - 1} ghim <IoChevronDownSharp size={10} />
+                    </button>
+                  )}
+                  <div className="pinned-message-options-wrapper">
+                    <button
+                      className="pinned-message-options"
+                      onClick={(e) => handlePinnedContextMenu(e, pinnedMessages[0], 0)}
+                    >
+                      <FaEllipsisH />
+                    </button>
+                    {pinnedContextMenu.visible && pinnedContextMenu.messageIndex === 0 && (
+                      <div className="pinned-context-menu">
+                        {pinnedContextMenu.message?.type === 'text' && (
+                          <div className="context-menu-item" onClick={() => handlePinnedContextMenuAction('copy')}>
+                            <FaCopy /> Sao chép
+                          </div>
+                        )}
+                        <div className="context-menu-item" onClick={() => handlePinnedContextMenuAction('unpin')}>
+                          <FaThumbtack /> Bỏ ghim
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
               <div className="pinned-messages-list">
+                <div className="pinned-messages-header">
+                  <h4>Danh sách tin nhắn ghim ({pinnedMessages.length})</h4>
+                  <button
+                    className="pinned-messages-collapse"
+                    onClick={() => setShowPinnedList(false)}
+                  >
+                    Thu gọn <FaChevronUp />
+                  </button>
+                </div>
                 {pinnedMessages.map((msg, index) => (
                   <div key={index} className="pinned-message-item">
-                    <span className="pinned-message-sender">
-                      {msg.sender?.name || (chat?.isGroup ? 'Thành viên nhóm' : chat?.name || 'Không xác định')}
-                    </span>
-                    <span className="pinned-message-content">
-                      {msg.type === 'text' ? msg.content : `(${msg.type})`}
-                    </span>
+                    <div className="pinned-message-left">
+                      <BiMessageRoundedDetail className="pinned-message-icon" />
+                      <div className="pinned-message-text">
+                        <div className="pinned-message-label">Tin nhắn</div>
+                        <div className="pinned-message-details">
+                          <span className="pinned-message-sender">
+                            {msg.sender?.name || (chat?.isGroup ? 'Thành viên nhóm' : chat?.name || 'Không xác định')}:
+                          </span>
+                          <span className="pinned-message-content">
+                            {msg.type === 'text' ? msg.content : `(${msg.type})`}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="pinned-message-right">
+                      <div className="pinned-message-options-wrapper">
+                        <button
+                          className="pinned-message-options"
+                          onClick={(e) => handlePinnedContextMenu(e, msg, index + 1)}
+                        >
+                          <FaEllipsisH />
+                        </button>
+                        {pinnedContextMenu.visible && pinnedContextMenu.messageIndex === index + 1 && (
+                          <div className="pinned-context-menu">
+                            {pinnedContextMenu.message?.type === 'text' && (
+                              <div className="context-menu-item" onClick={() => handlePinnedContextMenuAction('copy')}>
+                                <FaCopy /> Sao chép
+                              </div>
+                            )}
+                            <div className="context-menu-item" onClick={() => handlePinnedContextMenuAction('unpin')}>
+                              <FaThumbtack /> Bỏ ghim
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -564,6 +746,23 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
               </button>
               <button onClick={cancelDelete} className="cancel-btn">
                 Hủy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showUnpinModal && (
+        <div className="delete-modal">
+          <div className="delete-modal-content">
+            <h3>Bỏ ghim</h3>
+            <p>Bạn có chắc muốn bỏ ghim nội dung này không?</p>
+            <div className="delete-modal-actions">
+              <button onClick={cancelUnpin} className="cancel-btn">
+                Không
+              </button>
+              <button onClick={handleUnpinMessage} className="unpin-btn">
+                Bỏ ghim
               </button>
             </div>
           </div>

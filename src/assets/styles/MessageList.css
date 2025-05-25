@@ -16,6 +16,7 @@
   position: relative;
   box-sizing: border-box;
   overflow: visible;
+  width: 100%;
 }
 
 .message-left {
@@ -88,6 +89,7 @@
   line-height: 1.5;
   margin-left: auto;
   width: auto;
+  box-sizing: border-box;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
@@ -381,6 +383,12 @@
   text-align: center;
 }
 
+.delete-modal-content h3 {
+  margin: 0 0 10px 0;
+  font-size: 1.1em;
+  color: #333;
+}
+
 .delete-modal-content p {
   margin: 0 0 15px 0;
   font-size: 0.9em;
@@ -408,6 +416,15 @@
 
 .delete-modal-actions .confirm-btn:hover {
   background: #0056b3;
+}
+
+.delete-modal-actions .unpin-btn {
+  background: #ff0000;
+  color: white;
+}
+
+.delete-modal-actions .unpin-btn:hover {
+  background: #cc0000;
 }
 
 .delete-modal-actions .cancel-btn {
@@ -537,22 +554,132 @@
 .pinned-messages-container {
   position: sticky;
   top: 0;
-  background-color: #f5f5f5;
-  padding: 8px 10px;
+  background-color: #fff;
   z-index: 100;
-  border-bottom: 1px solid #e0e0e0;
+  border-radius: 8px;
 }
 
 .pinned-message {
   display: flex;
+  justify-content: space-between;
   align-items: center;
   background-color: #fff;
   padding: 8px 12px;
   border-radius: 8px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
   margin-bottom: 4px;
-  position: relative;
-  flex-wrap: wrap;
+}
+
+.pinned-message-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex: 1;
+}
+
+.pinned-message-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pinned-message-icon {
+  font-size: 1rem;
+  color: #5a6981;
+  margin-top: 4px;
+}
+
+.pinned-message-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.pinned-message-label {
+  font-weight: 500;
+  color: #5a6981;
+  font-size: 0.9rem;
+  margin-bottom: 4px;
+}
+
+.pinned-message-details {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pinned-message-sender {
+  font-weight: 500;
+  color: #5a6981;
+  font-size: 0.9rem;
+}
+
+.pinned-message-content {
+  color: #081b3a;
+  font-size: 0.9rem;
+  word-break: break-word;
+  white-space: normal;
+  flex: 1;
+}
+
+.pinned-messages-toggle {
+  background-color: white;
+  border: 1px solid #b5b5b5;
+  color: #081b3a;
+  border-radius: 2px;
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  align-self: center;
+  width: 100px;
+  text-align: center;
+}
+
+.pinned-messages-toggle:hover {
+  background-color: #e5e7eb;
+}
+
+.pinned-message-options-wrapper {
+  position: relative; /* Định vị tương đối để làm cha cho menu */
+}
+
+.pinned-message-options {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: #5a6981;
+  padding: 4px;
+}
+
+.pinned-message-options:hover {
+  color: #081b3a;
+}
+
+.pinned-context-menu {
+  position: absolute;
+  top: 100%; /* Đặt ngay dưới nút ba chấm */
+  left: -10px; /* Lệch sang trái một chút */
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  z-index: 3000;
+  min-width: 150px;
+  overflow: hidden;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 0.9em;
+  color: #333;
+  gap: 8px;
+}
+
+.context-menu-item:hover {
+  background-color: #f0f0f0;
 }
 
 .pinned-message-placeholder {
@@ -567,62 +694,60 @@
   font-size: 0.9rem;
 }
 
-.pinned-message-sender {
-  font-weight: 500;
-  color: #5a6981;
-  margin-right: 8px;
-  font-size: 0.9rem;
-  flex-shrink: 0;
-}
-
-.pinned-message-content {
-  color: #081b3a;
-  font-size: 0.9rem;
-  flex: 1 1 auto;
-  word-break: break-word;
-  white-space: normal;
-  max-width: 70%;
-}
-
-.pinned-messages-toggle {
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 12px;
-  padding: 4px 8px;
-  font-size: 0.8rem;
-  cursor: pointer;
-  margin-left: 8px;
-  margin-top: 4px;
-}
-
-.pinned-messages-toggle:hover {
-  background-color: #0056b3;
-}
-
 .pinned-messages-list {
-  margin-top: 8px;
   background-color: #fff;
   border-radius: 8px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-  padding: 8px;
+}
+
+.pinned-messages-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 5px;
+  background-color: #ebecf0;
+}
+
+.pinned-messages-header h4 {
+  margin: 0;
+  line-height: 18px;
+  font-weight: 600;
+  font-size: .8125rem;
+  color: #333;
+  margin-top: 10px;
+  margin-left: 10px;
+}
+
+.pinned-messages-collapse {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background-color: #f0f0f0;
+  color: #333;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  width: 100px;
+  justify-content: center;
+  margin-top: 10px;
+  margin-right: 10px;
+  font-weight: 500;
+}
+
+.pinned-messages-collapse:hover {
+  background-color: #e0e0e0;
 }
 
 .pinned-message-item {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  padding: 4px 0;
-  flex-wrap: wrap;
+  padding: 4px 12px;
+  border-bottom: 1px solid #e0e0e0;
 }
 
-.pinned-message-item .pinned-message-sender {
-  font-size: 0.85rem;
-}
-
-.pinned-message-item .pinned-message-content {
-  font-size: 0.85rem;
-  flex: 1 1 auto;
-  word-break: break-word;
-  white-space: normal;
-  max-width: 70%;
+.pinned-message-item:last-child {
+  border-bottom: none;
 }
