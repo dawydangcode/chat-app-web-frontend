@@ -557,7 +557,8 @@ const MessagesTab = ({
             return new Date(b.timestamp) - new Date(a.timestamp);
           })
         );
-        alert('Đã ghim hội thoại!');
+        // Đóng ContextMenu sau khi ghim thành công
+        setContextMenu(null);
       }
     } catch (error) {
       const errorMessage = error.response?.data?.message || error.message;
@@ -593,7 +594,8 @@ const MessagesTab = ({
             return new Date(b.timestamp) - new Date(a.timestamp);
           })
         );
-        alert('Đã bỏ ghim hội thoại!');
+        // Đóng ContextMenu sau khi bỏ ghim thành công
+        setContextMenu(null);
       }
     } catch (error) {
       const errorMessage = error.response?.data?.message || error.message;
