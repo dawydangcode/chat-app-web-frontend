@@ -9,7 +9,7 @@
 }
 
 .message {
-  margin: 8px 10px;
+  margin: 4px 10px;
   border-radius: 8px;
   max-width: 80%;
   display: flex;
@@ -78,7 +78,7 @@
   line-height: 1.5;
   width: auto;
   box-sizing: border-box;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  /* box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); */
 }
 
 .message-right .message-content {
@@ -90,19 +90,20 @@
   margin-left: auto;
   width: auto;
   box-sizing: border-box;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  /* box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); */
 }
 
 .message p {
   margin: 0;
   word-break: break-word;
   white-space: pre-wrap;
+  color: #081b3a;
 }
 
 .message span {
   color: #5a6981;
   font-size: .8125rem;
-  font-weight: 500;
+  font-weight: 400;
   line-height: 1.5;
 }
 
@@ -117,7 +118,6 @@
 
 .message-time {
   font-size: .75rem;
-  font-weight: 400;
   line-height: 1.5;
   color: #44546f;
   margin-top: 4px;
@@ -584,9 +584,10 @@
 }
 
 .pinned-message-icon {
-  font-size: 1rem;
-  color: #5a6981;
+  font-size: 25px;
+  color: #005ae0;
   margin-top: 4px;
+  font-weight: 300;
 }
 
 .pinned-message-text {
@@ -596,10 +597,11 @@
 }
 
 .pinned-message-label {
-  font-weight: 500;
-  color: #5a6981;
-  font-size: 0.9rem;
+  color: #081b3a;
   margin-bottom: 4px;
+  font-size: .8125rem;
+  font-weight: 500;
+  line-height: 1.5;
 }
 
 .pinned-message-details {
@@ -610,7 +612,7 @@
 
 .pinned-message-sender {
   font-weight: 500;
-  color: #5a6981;
+  color: #081b3a;
   font-size: 0.9rem;
 }
 
@@ -628,11 +630,13 @@
   color: #081b3a;
   border-radius: 2px;
   padding: 4px 8px;
-  font-size: 0.8rem;
+  font-size: .875rem;
   cursor: pointer;
   align-self: center;
   width: 100px;
   text-align: center;
+  font-weight: 500;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
 .pinned-messages-toggle:hover {
@@ -647,13 +651,13 @@
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 0.7rem;
   color: #5a6981;
   padding: 4px;
 }
-
+ 
 .pinned-message-options:hover {
-  color: #081b3a;
+  background-color: #e5e7eb;
 }
 
 .pinned-context-menu {
@@ -727,13 +731,14 @@
   border: none;
   border-radius: 4px;
   padding: 4px 8px;
-  font-size: 0.8rem;
+  font-size: 0.875rem;
   cursor: pointer;
   width: 100px;
   justify-content: center;
   margin-top: 10px;
   margin-right: 10px;
   font-weight: 500;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
 .pinned-messages-collapse:hover {

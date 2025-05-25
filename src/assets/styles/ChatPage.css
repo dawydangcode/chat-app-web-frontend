@@ -92,7 +92,7 @@ body {
 }
 
 .sidebar-actions button.active {
-  background-color: #16396e;
+  background-color: #0043a8;
   border-radius: 5px;
 }
 
@@ -176,23 +176,37 @@ body {
   align-items: center;
   padding: 10px;
   cursor: pointer;
+  position: relative;
+  height: 60px;
+
 }
+
 .chat-item:hover {
   background-color: #f1f2f4;
 }
+
 .chat-item.unread {
-  background-color: #e0f7fa;
+  background-color: #fff;
 }
 
 .chat-avatar {
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   margin-right: 10px;
 }
 
 .chat-info {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 5px;
 }
 
 .chat-name {
@@ -200,31 +214,51 @@ body {
   font-weight: 500;
   line-height: 1.5;
   color: #081b3a;
+  margin: 0;
+}
+
+.chat-time-difference {
+  font-size: 0.8em;
+  color: #999;
+  margin: 0;
+}
+
+.last-message-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .last-message {
   color: #666;
   font-size: 0.9em;
   margin: 5px 0 0;
-}
-
-.chat-time {
-  font-size: 0.8em;
-  color: #999;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .unread-badge {
-  position: absolute;
   background-color: #cd171b;
   color: white;
   border-radius: 50%;
-  width: 20px;
-  height: 20px;
+  width: 15px;
+  height: 15px;
   display: flex;
   justify-content: center;
   align-items: center;
   font-size: 10px;
-  margin-left: 240px;
+}
+
+.pinned-icon {
+  color: #5a6981;
+  width: 15px;
+  height: 15px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 12px;
 }
 
 .no-chats {
@@ -264,7 +298,8 @@ body {
 .chat-info p {
   margin: 0;
   color: #666;
-  font-size: 0.9rem;
+  font-size: 1rem;
+  
 }
 
 .toggle-info-btn {
@@ -772,16 +807,48 @@ body {
   display: flex;
   align-items: center;
   padding: 10px;
-  border-bottom: 1px solid #ddd;
   cursor: pointer;
 }
 
 .chat-item.new-message-highlight:hover {
-  background-color: #e6f0ff; /* Màu nền xanh nhạt khi có tin nhắn mới */
+  background-color: #f1f2f4; /* Màu nền xanh nhạt khi có tin nhắn mới */
 }
 
 /* Làm nổi bật cuộc hội thoại đang được chọn */
 .chat-item.selected-chat {
   background-color: #e5f1ff; /* Màu nền xanh nhạt khi được chọn */
   transition: background-color 0.3s ease;
+}
+
+/* Context Menu */
+.context-menu {
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  width: 200px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.context-menu-item {
+  padding: 10px 15px;
+  font-size: 14px;
+  color: #333;
+  cursor: pointer;
+}
+
+.context-menu-item:hover {
+  background-color: #f0f2f5;
+}
+
+.context-menu-divider {
+  border-top: 1px solid #ddd;
+}
+
+.context-menu-item-danger {
+  color: #cd171b;
+}
+
+.context-menu-item-danger:hover {
+  background-color: #ffe6e6;
 }

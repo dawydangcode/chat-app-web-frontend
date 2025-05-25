@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import UserSearch from './UserSearch';
 import { useNavigate } from 'react-router-dom';
 import '../../assets/styles/ChatPage.css';
 import { FaBellSlash, FaThumbtack, FaUsers } from 'react-icons/fa';
 import { initializeSocket, getSocket } from '../../utils/socket';
+import { RiPushpinFill } from "react-icons/ri";
 
 // Utility function for debouncing
 const debounce = (func, wait) => {
@@ -13,6 +14,38 @@ const debounce = (func, wait) => {
     clearTimeout(timeout);
     timeout = setTimeout(() => func(...args), wait);
   };
+};
+
+// Hàm tính toán thời gian từ tin nhắn cuối cùng đến hiện tại
+const getTimeDifference = (timestamp) => {
+  if (!timestamp) return '';
+
+  const now = new Date();
+  const lastMessageTime = new Date(timestamp);
+  const diffInSeconds = Math.floor((now - lastMessageTime) / 1000);
+
+  if (diffInSeconds < 10) {
+    return 'Vừa xong';
+  } else if (diffInSeconds < 60) {
+    return `${diffInSeconds} giây trước`;
+  } else if (diffInSeconds < 3600) {
+    const minutes = Math.floor(diffInSeconds / 60);
+    return `${minutes} phút trước`;
+  } else if (diffInSeconds < 86400) {
+    const hours = Math.floor(diffInSeconds / 3600);
+    return `${hours} giờ trước`;
+  } else if (diffInSeconds < 604800) {
+    const days = Math.floor(diffInSeconds / 86400);
+    return days === 1 ? 'Hôm qua' : `${days} ngày trước`;
+  } else if (diffInSeconds < 691200) {
+    return '7 ngày trước';
+  } else {
+    return lastMessageTime.toLocaleDateString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+  }
 };
 
 const MessagesTab = ({
@@ -35,17 +68,20 @@ const MessagesTab = ({
   setNewMessageHighlights,
   unreadCounts,
   setUnreadCounts,
-  selectedChat, // Đảm bảo prop này được nhận
+  selectedChat,
 }) => {
   const [chats, setChats] = useState([]);
   const [friendSearchQuery, setFriendSearchQuery] = useState('');
   const [foundUser, setFoundUser] = useState(null);
   const [friendStatus, setFriendStatus] = useState(null);
   const [friendRequestMessage, setFriendRequestMessage] = useState('');
+  const [contextMenu, setContextMenu] = useState(null);
+  const [timeDifferences, setTimeDifferences] = useState({});
   const navigate = useNavigate();
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const currentUserId = currentUser?.userId;
   const userName = currentUser?.name || 'Người dùng';
+  const contextMenuRef = useRef(null);
 
   const fetchChats = async () => {
     if (!currentUserId) {
@@ -67,22 +103,26 @@ const MessagesTab = ({
       if (response.data && response.data.success) {
         const { conversations = [], groups = [] } = response.data.data;
 
-        const formattedIndividualChats = conversations.map((conv) => ({
-          id: conv.otherUserId,
-          name: conv.displayName || 'Không có tên',
-          phoneNumber: conv.phoneNumber || '',
-          avatar: conv.avatar || 'https://placehold.co/50x50',
-          lastMessage:
-            conv.lastMessage?.status === 'recalled'
-              ? '(Tin nhắn đã thu hồi)'
-              : conv.lastMessage?.content || 'Chưa có tin nhắn',
-          timestamp: conv.lastMessage?.timestamp || new Date().toISOString(),
-          isMuted: conv.isMuted || false,
-          isPinned: conv.isPinned || false,
-          targetUserId: conv.otherUserId,
-          isGroup: false,
-          unreadCount: conv.unreadCount || 0,
-        }));
+        const formattedIndividualChats = conversations.map((conv) => {
+          console.log('Conversation:', conv);
+          return {
+            id: conv.otherUserId,
+            name: conv.displayName || 'Không có tên',
+            phoneNumber: conv.phoneNumber || '',
+            avatar: conv.avatar || 'https://placehold.co/50x50',
+            lastMessage:
+              conv.lastMessage?.status === 'recalled'
+                ? '(Tin nhắn đã thu hồi)'
+                : conv.lastMessage?.content || 'Chưa có tin nhắn',
+            lastMessageSender: conv.lastMessage?.senderId === currentUserId ? 'Bạn' : '',
+            timestamp: conv.lastMessage?.timestamp || new Date().toISOString(),
+            isMuted: conv.isMuted || false,
+            isPinned: conv.isPinned || false,
+            targetUserId: conv.otherUserId,
+            isGroup: false,
+            unreadCount: conv.unreadCount || 0,
+          };
+        });
 
         const formattedGroupChats = groups.map((group) => ({
           id: group.groupId,
@@ -92,6 +132,7 @@ const MessagesTab = ({
             group.lastMessage?.isRecalled
               ? '(Tin nhắn đã thu hồi)'
               : group.lastMessage?.content || 'Chưa có tin nhắn',
+          lastMessageSender: group.lastMessage?.senderId === currentUserId ? 'Bạn' : group.lastMessage?.sender?.name || 'Thành viên nhóm',
           timestamp: group.lastMessage?.timestamp || group.createdAt || new Date().toISOString(),
           isMuted: false,
           isPinned: false,
@@ -114,6 +155,12 @@ const MessagesTab = ({
             [chat.id]: chat.unreadCount || 0,
           }), {})
         );
+
+        const initialTimeDiffs = combinedChats.reduce((acc, chat) => ({
+          ...acc,
+          [chat.id]: getTimeDifference(chat.timestamp),
+        }), {});
+        setTimeDifferences(initialTimeDiffs);
       }
     } catch (error) {
       console.error('Lỗi khi lấy danh sách hội thoại:', error);
@@ -128,6 +175,21 @@ const MessagesTab = ({
   useEffect(() => {
     fetchChats();
   }, [navigate, currentUserId]);
+
+  // Cập nhật thời gian mỗi phút
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTimeDifferences((prev) => {
+        const updated = { ...prev };
+        chats.forEach((chat) => {
+          updated[chat.id] = getTimeDifference(chat.timestamp);
+        });
+        return updated;
+      });
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, [chats]);
 
   useEffect(() => {
     if (!currentUserId) return;
@@ -144,7 +206,6 @@ const MessagesTab = ({
       return;
     }
 
-    // Debounced handler for receiving messages
     const handleReceiveMessage = debounce((data) => {
       const newMessage = data.message || data;
       const conversationId = newMessage.senderId === currentUserId ? newMessage.receiverId : newMessage.senderId;
@@ -157,13 +218,22 @@ const MessagesTab = ({
             ? {
                 ...chat,
                 lastMessage: newMessage.status === 'recalled' ? '(Tin nhắn đã thu hồi)' : newMessage.content || 'Chưa có tin nhắn',
+                lastMessageSender: newMessage.senderId === currentUserId ? 'Bạn' : '',
                 timestamp: newMessage.timestamp || new Date().toISOString(),
               }
             : chat
-        )
+        ).sort((a, b) => {
+          if (a.isPinned && !b.isPinned) return -1;
+          if (!a.isPinned && b.isPinned) return 1;
+          return new Date(b.timestamp) - new Date(a.timestamp);
+        })
       );
 
-      // Chỉ cập nhật thông báo nếu tin nhắn không thuộc đoạn chat hiện tại
+      setTimeDifferences((prev) => ({
+        ...prev,
+        [conversationId]: getTimeDifference(newMessage.timestamp || new Date().toISOString()),
+      }));
+
       if (newMessage.senderId !== currentUserId && conversationId !== selectedChat?.id) {
         console.log('Adding notification for:', { conversationId });
         setNewMessageHighlights((prev) => {
@@ -178,7 +248,6 @@ const MessagesTab = ({
       }
     }, 100);
 
-    // Debounced handler for receiving group messages
     const handleNewGroupMessage = debounce((data) => {
       const { groupId, message } = data;
       if (message.senderId !== currentUserId) {
@@ -188,13 +257,22 @@ const MessagesTab = ({
               ? {
                   ...chat,
                   lastMessage: message.status === 'recalled' ? '(Tin nhắn đã thu hồi)' : message.content || 'Chưa có tin nhắn',
+                  lastMessageSender: message.senderId === currentUserId ? 'Bạn' : message.sender?.name || 'Thành viên nhóm',
                   timestamp: message.timestamp || new Date().toISOString(),
                 }
               : chat
-          )
+          ).sort((a, b) => {
+            if (a.isPinned && !b.isPinned) return -1;
+            if (!a.isPinned && b.isPinned) return 1;
+            return new Date(b.timestamp) - new Date(a.timestamp);
+          })
         );
 
-        // Chỉ cập nhật thông báo nếu tin nhắn không thuộc đoạn chat hiện tại
+        setTimeDifferences((prev) => ({
+          ...prev,
+          [groupId]: getTimeDifference(message.timestamp || new Date().toISOString()),
+        }));
+
         if (groupId !== selectedChat?.id) {
           console.log('Adding group notification for:', { groupId });
           setNewMessageHighlights((prev) => {
@@ -210,15 +288,60 @@ const MessagesTab = ({
       }
     }, 100);
 
-    // Lắng nghe tin nhắn mới cho chat đơn
-    chatSocket.on('receiveMessage', handleReceiveMessage);
+    const handleUpdateChatList = (data) => {
+      const { conversationId, message } = data;
+      const senderId = message.senderId === currentUserId ? message.receiverId : message.senderId;
+      const chatId = message.groupId || senderId;
 
-    // Lắng nghe tin nhắn mới cho chat nhóm
+      setChats((prevChats) => {
+        const chatIndex = prevChats.findIndex((chat) => chat.id === chatId);
+        if (chatIndex === -1) {
+          return prevChats;
+        }
+
+        const updatedChats = [...prevChats];
+        updatedChats[chatIndex] = {
+          ...updatedChats[chatIndex],
+          lastMessage: message.status === 'recalled' ? '(Tin nhắn đã thu hồi)' : message.content || 'Chưa có tin nhắn',
+          lastMessageSender: message.senderId === currentUserId ? 'Bạn' : updatedChats[chatIndex].name,
+          timestamp: message.timestamp || new Date().toISOString(),
+        };
+
+        return updatedChats.sort((a, b) => {
+          if (a.isPinned && !b.isPinned) return -1;
+          if (!a.isPinned && b.isPinned) return 1;
+          return new Date(b.timestamp) - new Date(a.timestamp);
+        });
+      });
+
+      setTimeDifferences((prev) => ({
+        ...prev,
+        [chatId]: getTimeDifference(message.timestamp || new Date().toISOString()),
+      }));
+
+      if (message.senderId !== currentUserId && chatId !== selectedChat?.id) {
+        setNewMessageHighlights((prev) => {
+          const newSet = new Set(prev);
+          newSet.add(chatId);
+          return newSet;
+        });
+        setUnreadCounts((prev) => ({
+          ...prev,
+          [chatId]: (prev[chatId] || 0) + 1,
+        }));
+      }
+    };
+
+    chatSocket.on('receiveMessage', handleReceiveMessage);
     groupSocket.on('newGroupMessage', handleNewGroupMessage);
+    chatSocket.on('updateChatList', handleUpdateChatList);
+    groupSocket.on('updateChatList', handleUpdateChatList);
 
     return () => {
       chatSocket.off('receiveMessage', handleReceiveMessage);
       groupSocket.off('newGroupMessage', handleNewGroupMessage);
+      chatSocket.off('updateChatList', handleUpdateChatList);
+      groupSocket.off('updateChatList', handleUpdateChatList);
     };
   }, [currentUserId, navigate, selectedChat]);
 
@@ -366,8 +489,8 @@ const MessagesTab = ({
     try {
       const token = localStorage.getItem('token');
       const socket = getSocket('/chat');
-      
-      const endpoint = chatId.includes('-') // Giả định groupId chứa dấu '-'
+
+      const endpoint = chatId.includes('-')
         ? `http://localhost:3000/api/groups/messages/mark-as-seen/${chatId}`
         : `http://localhost:3000/api/messages/mark-as-seen/${chatId}`;
 
@@ -386,7 +509,6 @@ const MessagesTab = ({
   };
 
   const handleSelectChat = (chat) => {
-    // Clear the highlight and unread count immediately
     setNewMessageHighlights((prev) => {
       const newSet = new Set(prev);
       newSet.delete(chat.id);
@@ -397,10 +519,114 @@ const MessagesTab = ({
       [chat.id]: 0,
     }));
 
-    // Proceed with selecting the chat and marking messages as read
     onSelectChat(chat);
     handleMarkAsRead(chat.id);
   };
+
+  const getPinnedChatsCount = () => {
+    return chats.filter((chat) => chat.isPinned).length;
+  };
+
+  const handlePinConversation = async (chat) => {
+    if (chat.isPinned) {
+      console.log('Conversation is already pinned:', chat.id);
+      return;
+    }
+
+    const token = localStorage.getItem('token');
+    try {
+      const pinnedCount = getPinnedChatsCount();
+      if (pinnedCount >= 5) {
+        alert('Bạn chỉ có thể ghim tối đa 5 hội thoại!');
+        return;
+      }
+
+      const response = await axios.post(
+        'http://localhost:3000/api/conversations/pin-conversation',
+        { pinnedUserId: chat.id },
+        { headers: { Authorization: `Bearer ${token.trim()}` } }
+      );
+
+      if (response.data.success) {
+        setChats((prevChats) =>
+          prevChats.map((c) =>
+            c.id === chat.id ? { ...c, isPinned: true } : c
+          ).sort((a, b) => {
+            if (a.isPinned && !b.isPinned) return -1;
+            if (!a.isPinned && b.isPinned) return 1;
+            return new Date(b.timestamp) - new Date(a.timestamp);
+          })
+        );
+        alert('Đã ghim hội thoại!');
+      }
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || error.message;
+      if (errorMessage === 'Hội thoại đã được ghim!') {
+        console.log('Conversation is already pinned, no action needed.');
+      } else {
+        alert('Lỗi khi ghim hội thoại: ' + errorMessage);
+      }
+    }
+  };
+
+  const handleUnpinConversation = async (chat) => {
+    if (!chat.isPinned) {
+      console.log('Conversation is not pinned:', chat.id);
+      return;
+    }
+
+    const token = localStorage.getItem('token');
+    try {
+      const response = await axios.post(
+        'http://localhost:3000/api/conversations/unpin-conversation',
+        { pinnedUserId: chat.id },
+        { headers: { Authorization: `Bearer ${token.trim()}` } }
+      );
+
+      if (response.data.success) {
+        setChats((prevChats) =>
+          prevChats.map((c) =>
+            c.id === chat.id ? { ...c, isPinned: false } : c
+          ).sort((a, b) => {
+            if (a.isPinned && !b.isPinned) return -1;
+            if (!a.isPinned && b.isPinned) return 1;
+            return new Date(b.timestamp) - new Date(a.timestamp);
+          })
+        );
+        alert('Đã bỏ ghim hội thoại!');
+      }
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || error.message;
+      if (errorMessage === 'Hội thoại chưa được ghim!') {
+        console.log('Conversation is not pinned, no action needed.');
+      } else {
+        alert('Lỗi khi bỏ ghim hội thoại: ' + errorMessage);
+      }
+    }
+  };
+
+  const handleContextMenu = (event, chat) => {
+    event.preventDefault();
+    const { clientX, clientY } = event;
+    setContextMenu({
+      x: clientX,
+      y: clientY,
+      chat,
+    });
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(event.target)) {
+        setContextMenu(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   return (
     <div className="chat-list-content">
@@ -422,6 +648,7 @@ const MessagesTab = ({
                   selectedChat?.id === chat.id ? 'selected-chat' : ''
                 }`}
                 onClick={() => handleSelectChat(chat)}
+                onContextMenu={(e) => handleContextMenu(e, chat)}
               >
                 <img
                   src={chat.avatar}
@@ -433,24 +660,26 @@ const MessagesTab = ({
                   }}
                 />
                 <div className="chat-info">
-                  <p className="chat-name">
-                    {chat.name || 'Không có tên'}
-                    {chat.isGroup && <FaUsers className="group-icon" title="Nhóm chat" />}
-                    {chat.isPinned && <FaThumbtack className="pinned-icon" />}
-                    {chat.isMuted && <FaBellSlash className="muted-icon" />}
-                    {unreadCounts[chat.id] > 0 && (
+                  <div className="chat-header-row">
+                    <p className="chat-name">
+                      {chat.name || 'Không có tên'}
+                      {chat.isGroup && <FaUsers className="group-icon" title="Nhóm chat" />}
+                      {chat.isMuted && <FaBellSlash className="muted-icon" />}
+                    </p>
+                    <p className="chat-time-difference">
+                      {timeDifferences[chat.id] || ''}
+                    </p>
+                  </div>
+                  <div className="last-message-row">
+                    <p className="last-message">
+                      {chat.lastMessageSender ? `${chat.lastMessageSender}: ` : ''}{chat.lastMessage || 'Chưa có tin nhắn'}
+                    </p>
+                    {unreadCounts[chat.id] > 0 ? (
                       <span className="unread-badge">{unreadCounts[chat.id]}</span>
+                    ) : (
+                      chat.isPinned && <RiPushpinFill className="pinned-icon" />
                     )}
-                  </p>
-                  <p className="last-message">{chat.lastMessage || 'Chưa có tin nhắn'}</p>
-                  <p className="chat-time">
-                    {chat.timestamp
-                      ? new Date(chat.timestamp).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })
-                      : ''}
-                  </p>
+                  </div>
                 </div>
               </div>
             ))
@@ -460,6 +689,39 @@ const MessagesTab = ({
             </div>
           )}
         </>
+      )}
+
+      {contextMenu && (
+        <div
+          className="context-menu"
+          ref={contextMenuRef}
+          style={{
+            top: contextMenu.y,
+            left: contextMenu.x,
+            position: 'fixed',
+            zIndex: 1000,
+          }}
+        >
+          <div
+            className="context-menu-item"
+            onClick={() =>
+              contextMenu.chat.isPinned
+                ? handleUnpinConversation(contextMenu.chat)
+                : handlePinConversation(contextMenu.chat)
+            }
+          >
+            {contextMenu.chat.isPinned ? 'Bỏ ghim hội thoại' : 'Ghim hội thoại'}
+          </div>
+          <div className="context-menu-divider" />
+          <div className="context-menu-item">Thêm vào nhóm</div>
+          <div className="context-menu-item">Ẩn trò chuyện</div>
+          <div className="context-menu-item">Tắt thông báo hội thoại</div>
+          <div className="context-menu-item">Tin nhắn tự xóa</div>
+          <div className="context-menu-divider" />
+          <div className="context-menu-item context-menu-item-danger">Xóa hội thoại</div>
+          <div className="context-menu-divider" />
+          <div className="context-menu-item">Báo xấu</div>
+        </div>
       )}
 
       {isAddFriendModalOpen && (

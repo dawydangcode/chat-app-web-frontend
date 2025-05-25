@@ -5,6 +5,7 @@ import { FaUndo, FaTrash, FaShare, FaReply, FaCopy, FaThumbtack, FaChevronUp, Fa
 import { BiMessageRoundedDetail } from "react-icons/bi";
 import { LuCheckCheck, LuCheck } from 'react-icons/lu';
 import { IoChevronDownSharp } from "react-icons/io5";
+import { PiDotsThreeLight } from "react-icons/pi";
 
 const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, onForwardMessage, chat, socket }) => {
   const currentUserId = JSON.parse(localStorage.getItem('user') || '{}')?.userId;
@@ -225,121 +226,121 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
   };
 
   const handlePinMessage = async (messageId) => {
-  try {
-    const isGroupChat = chat?.isGroup;
-    const endpoint = isGroupChat
-      ? `http://localhost:3000/api/groups/pin/messages/${chat.groupId}/${messageId}`
-      : `http://localhost:3000/api/messages/pin/${messageId}`;
-    const method = isGroupChat ? 'PUT' : 'PATCH';
+    try {
+      const isGroupChat = chat?.isGroup;
+      const endpoint = isGroupChat
+        ? `http://localhost:3000/api/groups/pin/messages/${chat.groupId}/${messageId}`
+        : `http://localhost:3000/api/messages/pin/${messageId}`;
+      const method = isGroupChat ? 'PUT' : 'PATCH';
 
-    const response = await fetch(endpoint, {
-      method,
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('token')}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
-    }
-
-    const result = await response.json();
-    if (result.success) {
-      const otherUserId = chat?.isGroup ? chat.groupId : chat?.userId;
-      const pinnedResponse = await fetch(`http://localhost:3000/api/messages/pinned/${otherUserId}`, {
+      const response = await fetch(endpoint, {
+        method,
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json',
         },
       });
 
-      if (!pinnedResponse.ok) {
-        throw new Error(`HTTP error! Status: ${pinnedResponse.status}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
       }
 
-      const pinnedResult = await pinnedResponse.json();
-      if (pinnedResult.success) {
-        const sortedMessages = (pinnedResult.messages || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        setPinnedMessages(sortedMessages);
+      const result = await response.json();
+      if (result.success) {
+        const otherUserId = chat?.isGroup ? chat.groupId : chat?.userId;
+        const pinnedResponse = await fetch(`http://localhost:3000/api/messages/pinned/${otherUserId}`, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+          },
+        });
+
+        if (!pinnedResponse.ok) {
+          throw new Error(`HTTP error! Status: ${pinnedResponse.status}`);
+        }
+
+        const pinnedResult = await pinnedResponse.json();
+        if (pinnedResult.success) {
+          const sortedMessages = (pinnedResult.messages || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+          setPinnedMessages(sortedMessages);
+        } else {
+          alert('Không thể lấy danh sách tin nhắn ghim mới: ' + pinnedResult.message);
+        }
       } else {
-        alert('Không thể lấy danh sách tin nhắn ghim mới: ' + pinnedResult.message);
+        alert('Không thể ghim tin nhắn: ' + result.message);
       }
-    } else {
-      alert('Không thể ghim tin nhắn: ' + result.message);
+    } catch (error) {
+      console.error('Lỗi khi ghim tin nhắn:', error);
+      alert('Đã xảy ra lỗi khi ghim tin nhắn. Vui lòng thử lại sau.');
     }
-  } catch (error) {
-    console.error('Lỗi khi ghim tin nhắn:', error);
-    alert('Đã xảy ra lỗi khi ghim tin nhắn. Vui lòng thử lại sau.');
-  }
-};
+  };
 
   const handleUnpinMessage = async () => {
-  if (!messageToUnpin) return;
+    if (!messageToUnpin) return;
 
-  try {
-    const isGroupChat = chat?.isGroup;
-    if (!isGroupChat && !chat?.userId) {
-      console.error('Invalid chat configuration:', chat);
-      alert('Cấu hình chat không hợp lệ. Vui lòng thử lại.');
-      return;
-    }
-    if (isGroupChat && !chat?.groupId) {
-      console.error('Missing groupId for group chat:', chat);
-      alert('Không tìm thấy ID nhóm. Vui lòng thử lại.');
-      return;
-    }
+    try {
+      const isGroupChat = chat?.isGroup;
+      if (!isGroupChat && !chat?.userId) {
+        console.error('Invalid chat configuration:', chat);
+        alert('Cấu hình chat không hợp lệ. Vui lòng thử lại.');
+        return;
+      }
+      if (isGroupChat && !chat?.groupId) {
+        console.error('Missing groupId for group chat:', chat);
+        alert('Không tìm thấy ID nhóm. Vui lòng thử lại.');
+        return;
+      }
 
-    const messageId = messageToUnpin.id || messageToUnpin.messageId;
-    const endpoint = isGroupChat
-      ? `http://localhost:3000/api/groups/pin/messages/${chat.groupId}/${messageId}`
-      : `http://localhost:3000/api/messages/pin/${messageId}`;
+      const messageId = messageToUnpin.id || messageToUnpin.messageId;
+      const endpoint = isGroupChat
+        ? `http://localhost:3000/api/groups/pin/messages/${chat.groupId}/${messageId}`
+        : `http://localhost:3000/api/messages/pin/${messageId}`;
 
-    console.log('Calling unpin endpoint:', endpoint);
+      console.log('Calling unpin endpoint:', endpoint);
 
-    const response = await fetch(endpoint, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('token')}`,
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('Unpin error response:', errorData);
-      throw new Error(`HTTP error! Status: ${response.status}`);
-    }
-
-    const result = await response.json();
-    if (result.success) {
-      const otherUserId = isGroupChat ? chat.groupId : chat.userId;
-      const pinnedResponse = await fetch(`http://localhost:3000/api/messages/pinned/${otherUserId}`, {
+      const response = await fetch(endpoint, {
+        method: 'DELETE',
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`,
         },
       });
 
-      if (!pinnedResponse.ok) {
-        throw new Error(`HTTP error! Status: ${pinnedResponse.status}`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Unpin error response:', errorData);
+        throw new Error(`HTTP error! Status: ${response.status}`);
       }
 
-      const pinnedResult = await pinnedResponse.json();
-      if (pinnedResult.success) {
-        const sortedMessages = (pinnedResult.messages || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        setPinnedMessages(sortedMessages);
+      const result = await response.json();
+      if (result.success) {
+        const otherUserId = isGroupChat ? chat.groupId : chat.userId;
+        const pinnedResponse = await fetch(`http://localhost:3000/api/messages/pinned/${otherUserId}`, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+          },
+        });
+
+        if (!pinnedResponse.ok) {
+          throw new Error(`HTTP error! Status: ${pinnedResponse.status}`);
+        }
+
+        const pinnedResult = await pinnedResponse.json();
+        if (pinnedResult.success) {
+          const sortedMessages = (pinnedResult.messages || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+          setPinnedMessages(sortedMessages);
+        } else {
+          alert('Không thể lấy danh sách tin nhắn ghim mới: ' + pinnedResult.message);
+        }
       } else {
-        alert('Không thể lấy danh sách tin nhắn ghim mới: ' + pinnedResult.message);
+        alert('Không thể bỏ ghim tin nhắn: ' + result.message);
       }
-    } else {
-      alert('Không thể bỏ ghim tin nhắn: ' + result.message);
+    } catch (error) {
+      console.error('Lỗi khi bỏ ghim tin nhắn:', error);
+      alert('Đã xảy ra lỗi khi bỏ ghim tin nhắn. Vui lòng thử lại sau.');
     }
-  } catch (error) {
-    console.error('Lỗi khi bỏ ghim tin nhắn:', error);
-    alert('Đã xảy ra lỗi khi bỏ ghim tin nhắn. Vui lòng thử lại sau.');
-  }
 
-  setShowUnpinModal(false);
-  setMessageToUnpin(null);
-};
+    setShowUnpinModal(false);
+    setMessageToUnpin(null);
+  };
 
   const cancelUnpin = () => {
     setShowUnpinModal(false);
@@ -640,9 +641,10 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                       )}
                       {showTime && (
                         <span className="message-time">
-                          {new Date(lastMessage.timestamp).toLocaleTimeString([], {
+                          {new Date(lastMessage.timestamp).toLocaleTimeString('vi-VN', {
                             hour: '2-digit',
                             minute: '2-digit',
+                            hour12: false, // Sử dụng định dạng 24 giờ
                           })}
                         </span>
                       )}
