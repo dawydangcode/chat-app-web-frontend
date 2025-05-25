@@ -192,34 +192,90 @@ const MessagesTab = ({
   }, [chats]);
 
   useEffect(() => {
-    if (!currentUserId) return;
+  if (!currentUserId) return;
 
-    const token = localStorage.getItem('token');
-    let chatSocket, groupSocket;
+  const token = localStorage.getItem('token');
+  let chatSocket, groupSocket;
 
-    try {
-      chatSocket = initializeSocket(token, '/chat');
-      groupSocket = initializeSocket(token, '/group');
-    } catch (error) {
-      console.error('Socket initialization failed:', error);
-      navigate('/login');
+  try {
+    chatSocket = initializeSocket(token, '/chat');
+    groupSocket = initializeSocket(token, '/group');
+  } catch (error) {
+    console.error('Socket initialization failed:', error);
+    navigate('/login');
+    return;
+  }
+
+  const processedMessages = new Set(); // Theo dõi messageId đã xử lý
+
+  const handleReceiveMessage = debounce((data) => {
+    console.log('handleReceiveMessage triggered', data);
+    const newMessage = data.message || data;
+    if (processedMessages.has(newMessage.messageId)) {
+      console.log('Message already processed:', newMessage.messageId);
       return;
     }
+    processedMessages.add(newMessage.messageId);
 
-    const handleReceiveMessage = debounce((data) => {
-      const newMessage = data.message || data;
-      const conversationId = newMessage.senderId === currentUserId ? newMessage.receiverId : newMessage.senderId;
+    const conversationId = newMessage.senderId === currentUserId ? newMessage.receiverId : newMessage.senderId;
 
-      console.log('Received message:', { conversationId, selectedChatId: selectedChat?.id });
+    setChats((prevChats) =>
+      prevChats.map((chat) =>
+        chat.id === conversationId
+          ? {
+              ...chat,
+              lastMessage: newMessage.status === 'recalled' ? '(Tin nhắn đã thu hồi)' : newMessage.content || 'Chưa có tin nhắn',
+              lastMessageSender: newMessage.senderId === currentUserId ? 'Bạn' : '', // Giữ nếu cần
+              timestamp: newMessage.timestamp || newMessage.createdAt || new Date().toISOString(),
+            }
+          : chat
+      ).sort((a, b) => {
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
+        return new Date(b.timestamp) - new Date(a.timestamp);
+      })
+    );
 
+    setTimeDifferences((prev) => ({
+      ...prev,
+      [conversationId]: getTimeDifference(newMessage.timestamp || newMessage.createdAt || new Date().toISOString()),
+    }));
+
+    if (newMessage.senderId !== currentUserId && conversationId !== selectedChat?.id) {
+      console.log('Adding notification for:', { conversationId, messageId: newMessage.messageId });
+      setNewMessageHighlights((prev) => {
+        const newSet = new Set(prev);
+        newSet.add(conversationId);
+        return newSet;
+      });
+      setUnreadCounts((prev) => {
+        console.log('Updating unreadCounts:', { chatId: conversationId, newCount: (prev[conversationId] || 0) + 1 });
+        return {
+          ...prev,
+          [conversationId]: (prev[conversationId] || 0) + 1,
+        };
+      });
+    }
+  }, 100);
+
+  const handleNewGroupMessage = debounce((data) => {
+    console.log('handleNewGroupMessage triggered', data);
+    const { groupId, message } = data;
+    if (processedMessages.has(message.messageId)) {
+      console.log('Message already processed:', message.messageId);
+      return;
+    }
+    processedMessages.add(message.messageId);
+
+    if (message.senderId !== currentUserId) {
       setChats((prevChats) =>
         prevChats.map((chat) =>
-          chat.id === conversationId
+          chat.id === groupId
             ? {
                 ...chat,
-                lastMessage: newMessage.status === 'recalled' ? '(Tin nhắn đã thu hồi)' : newMessage.content || 'Chưa có tin nhắn',
-                lastMessageSender: newMessage.senderId === currentUserId ? 'Bạn' : '',
-                timestamp: newMessage.timestamp || new Date().toISOString(),
+                lastMessage: message.status === 'recalled' ? '(Tin nhắn đã thu hồi)' : message.content || 'Chưa có tin nhắn',
+                lastMessageSender: message.senderId === currentUserId ? 'Bạn' : message.sender?.name || 'Thành viên nhóm', // Giữ nếu cần
+                timestamp: message.timestamp || message.createdAt || new Date().toISOString(),
               }
             : chat
         ).sort((a, b) => {
@@ -231,119 +287,92 @@ const MessagesTab = ({
 
       setTimeDifferences((prev) => ({
         ...prev,
-        [conversationId]: getTimeDifference(newMessage.timestamp || new Date().toISOString()),
+        [groupId]: getTimeDifference(message.timestamp || message.createdAt || new Date().toISOString()),
       }));
 
-      if (newMessage.senderId !== currentUserId && conversationId !== selectedChat?.id) {
-        console.log('Adding notification for:', { conversationId });
+      if (groupId !== selectedChat?.id) {
+        console.log('Adding group notification for:', { groupId, messageId: message.messageId });
         setNewMessageHighlights((prev) => {
           const newSet = new Set(prev);
-          newSet.add(conversationId);
+          newSet.add(groupId);
           return newSet;
         });
-        setUnreadCounts((prev) => ({
-          ...prev,
-          [conversationId]: (prev[conversationId] || 0) + 1,
-        }));
-      }
-    }, 100);
-
-    const handleNewGroupMessage = debounce((data) => {
-      const { groupId, message } = data;
-      if (message.senderId !== currentUserId) {
-        setChats((prevChats) =>
-          prevChats.map((chat) =>
-            chat.id === groupId
-              ? {
-                  ...chat,
-                  lastMessage: message.status === 'recalled' ? '(Tin nhắn đã thu hồi)' : message.content || 'Chưa có tin nhắn',
-                  lastMessageSender: message.senderId === currentUserId ? 'Bạn' : message.sender?.name || 'Thành viên nhóm',
-                  timestamp: message.timestamp || new Date().toISOString(),
-                }
-              : chat
-          ).sort((a, b) => {
-            if (a.isPinned && !b.isPinned) return -1;
-            if (!a.isPinned && b.isPinned) return 1;
-            return new Date(b.timestamp) - new Date(a.timestamp);
-          })
-        );
-
-        setTimeDifferences((prev) => ({
-          ...prev,
-          [groupId]: getTimeDifference(message.timestamp || new Date().toISOString()),
-        }));
-
-        if (groupId !== selectedChat?.id) {
-          console.log('Adding group notification for:', { groupId });
-          setNewMessageHighlights((prev) => {
-            const newSet = new Set(prev);
-            newSet.add(groupId);
-            return newSet;
-          });
-          setUnreadCounts((prev) => ({
+        setUnreadCounts((prev) => {
+          console.log('Updating unreadCounts:', { chatId: groupId, newCount: (prev[groupId] || 0) + 1 });
+          return {
             ...prev,
             [groupId]: (prev[groupId] || 0) + 1,
-          }));
-        }
+          };
+        });
       }
-    }, 100);
+    }
+  }, 100);
 
-    const handleUpdateChatList = (data) => {
-      const { conversationId, message } = data;
-      const senderId = message.senderId === currentUserId ? message.receiverId : message.senderId;
-      const chatId = message.groupId || senderId;
+  const handleUpdateChatList = debounce((data) => {
+    console.log('handleUpdateChatList triggered', data);
+    const { conversationId, message } = data;
+    if (processedMessages.has(message.messageId)) {
+      console.log('Message already processed:', message.messageId);
+      return;
+    }
+    processedMessages.add(message.messageId);
 
-      setChats((prevChats) => {
-        const chatIndex = prevChats.findIndex((chat) => chat.id === chatId);
-        if (chatIndex === -1) {
-          return prevChats;
-        }
+    const senderId = message.senderId === currentUserId ? message.receiverId : message.senderId;
+    const chatId = message.groupId || senderId;
 
-        const updatedChats = [...prevChats];
-        updatedChats[chatIndex] = {
-          ...updatedChats[chatIndex],
-          lastMessage: message.status === 'recalled' ? '(Tin nhắn đã thu hồi)' : message.content || 'Chưa có tin nhắn',
-          lastMessageSender: message.senderId === currentUserId ? 'Bạn' : updatedChats[chatIndex].name,
-          timestamp: message.timestamp || new Date().toISOString(),
-        };
+    setChats((prevChats) => {
+      const chatIndex = prevChats.findIndex((chat) => chat.id === chatId);
+      if (chatIndex === -1) {
+        return prevChats;
+      }
 
-        return updatedChats.sort((a, b) => {
-          if (a.isPinned && !b.isPinned) return -1;
-          if (!a.isPinned && b.isPinned) return 1;
-          return new Date(b.timestamp) - new Date(a.timestamp);
-        });
+      const updatedChats = [...prevChats];
+      updatedChats[chatIndex] = {
+        ...updatedChats[chatIndex],
+        lastMessage: message.status === 'recalled' ? '(Tin nhắn đã thu hồi)' : message.content || 'Chưa có tin nhắn',
+        lastMessageSender: message.senderId === currentUserId ? 'Bạn' : updatedChats[chatIndex].name, // Giữ nếu cần
+        timestamp: message.timestamp || message.createdAt || new Date().toISOString(),
+      };
+
+      return updatedChats.sort((a, b) => {
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
+        return new Date(b.timestamp) - new Date(a.timestamp);
       });
+    });
 
-      setTimeDifferences((prev) => ({
-        ...prev,
-        [chatId]: getTimeDifference(message.timestamp || new Date().toISOString()),
-      }));
+    setTimeDifferences((prev) => ({
+      ...prev,
+      [chatId]: getTimeDifference(message.timestamp || message.createdAt || new Date().toISOString()),
+    }));
 
-      if (message.senderId !== currentUserId && chatId !== selectedChat?.id) {
-        setNewMessageHighlights((prev) => {
-          const newSet = new Set(prev);
-          newSet.add(chatId);
-          return newSet;
-        });
-        setUnreadCounts((prev) => ({
+    if (message.senderId !== currentUserId && chatId !== selectedChat?.id) {
+      console.log('Adding updateChatList notification for:', { chatId, messageId: message.messageId });
+      setNewMessageHighlights((prev) => {
+        const newSet = new Set(prev);
+        newSet.add(chatId);
+        return newSet;
+      });
+      setUnreadCounts((prev) => {
+        console.log('Updating unreadCounts:', { chatId, newCount: (prev[chatId] || 0) + 1 });
+        return {
           ...prev,
           [chatId]: (prev[chatId] || 0) + 1,
-        }));
-      }
-    };
+        };
+      });
+    }
+  }, 100);
 
-    chatSocket.on('receiveMessage', handleReceiveMessage);
-    groupSocket.on('newGroupMessage', handleNewGroupMessage);
-    chatSocket.on('updateChatList', handleUpdateChatList);
-    groupSocket.on('updateChatList', handleUpdateChatList);
+  chatSocket.on('receiveMessage', handleReceiveMessage);
+  groupSocket.on('newGroupMessage', handleNewGroupMessage);
+  chatSocket.on('updateChatList', handleUpdateChatList);
 
-    return () => {
-      chatSocket.off('receiveMessage', handleReceiveMessage);
-      groupSocket.off('newGroupMessage', handleNewGroupMessage);
-      chatSocket.off('updateChatList', handleUpdateChatList);
-      groupSocket.off('updateChatList', handleUpdateChatList);
-    };
-  }, [currentUserId, navigate, selectedChat]);
+  return () => {
+    chatSocket.off('receiveMessage', handleReceiveMessage);
+    groupSocket.off('newGroupMessage', handleNewGroupMessage);
+    chatSocket.off('updateChatList', handleUpdateChatList);
+  };
+}, [currentUserId, navigate, selectedChat]);
 
   useEffect(() => {
     if (foundUser && friendStatus === 'stranger') {
@@ -485,30 +514,66 @@ const MessagesTab = ({
     }
   };
 
-  const handleMarkAsRead = async (chatId) => {
-    try {
-      const token = localStorage.getItem('token');
-      const socket = getSocket('/chat');
+  const handleMarkAsRead = async (chatId, isGroup) => {
+  try {
+    const token = localStorage.getItem('token');
+    const socket = getSocket('/chat');
 
-      const endpoint = chatId.includes('-')
-        ? `http://localhost:3000/api/groups/messages/mark-as-seen/${chatId}`
-        : `http://localhost:3000/api/messages/mark-as-seen/${chatId}`;
+    // Fetch unread messages for the chat
+    const endpoint = isGroup
+      ? `http://localhost:3000/api/groups/messages/${chatId}`
+      : `http://localhost:3000/api/messages/user/${chatId}`;
 
-      const response = await axios.post(
-        endpoint,
-        {},
-        { headers: { Authorization: `Bearer ${token.trim()}` } }
+    const response = await axios.get(endpoint, {
+      headers: { Authorization: `Bearer ${token.trim()}` },
+    });
+
+    if (response.data.success) {
+      const messages = response.data.messages || [];
+      // Filter for unread messages (status is 'sent' or 'delivered')
+      const unreadMessages = messages.filter(
+        (msg) => ['sent', 'delivered'].includes(msg.status)
       );
 
-      if (response.data.success) {
-        console.log(`Messages marked as seen for chat ${chatId}`);
-      }
-    } catch (error) {
-      console.error('Lỗi khi đánh dấu tin nhắn là đã xem:', error);
-    }
-  };
+      // Mark each unread message as seen
+      for (const message of unreadMessages) {
+        const markAsSeenEndpoint = isGroup
+          ? `http://localhost:3000/api/groups/messages/seen/${message.messageId}`
+          : `http://localhost:3000/api/messages/seen/${message.messageId}`;
 
-  const handleSelectChat = (chat) => {
+        try {
+          await axios.patch(
+            markAsSeenEndpoint,
+            {},
+            { headers: { Authorization: `Bearer ${token.trim()}` } }
+          );
+          console.log(`Message ${message.messageId} marked as seen for chat ${chatId}`);
+        } catch (patchError) {
+          console.error(`Failed to mark message ${message.messageId} as seen:`, patchError);
+        }
+      }
+
+      // Reset unread count for this chat
+      setUnreadCounts((prev) => ({
+        ...prev,
+        [chatId]: 0,
+      }));
+
+      console.log(`All unread messages marked as seen for chat ${chatId}`);
+    }
+  } catch (error) {
+    console.error('Lỗi khi đánh dấu tin nhắn là đã xem:', error);
+    if (error.response?.status === 404) {
+      console.warn(`Không tìm thấy ${isGroup ? 'nhóm' : 'người dùng'} ${chatId}, làm mới danh sách chats.`);
+      await fetchChats(); // Làm mới danh sách chats
+    } else if (error.response?.status === 500) {
+      console.warn(`Lỗi server khi đánh dấu tin nhắn là đã xem cho chat ${chatId}`);
+      alert('Không thể đánh dấu tin nhắn là đã xem do lỗi server. Vui lòng thử lại sau.');
+    }
+  }
+};
+
+const handleSelectChat = (chat) => {
     setNewMessageHighlights((prev) => {
       const newSet = new Set(prev);
       newSet.delete(chat.id);
@@ -520,7 +585,7 @@ const MessagesTab = ({
     }));
 
     onSelectChat(chat);
-    handleMarkAsRead(chat.id);
+    handleMarkAsRead(chat.id, chat.isGroup); // Truyền isGroup từ chat
   };
 
   const getPinnedChatsCount = () => {
@@ -557,7 +622,6 @@ const MessagesTab = ({
             return new Date(b.timestamp) - new Date(a.timestamp);
           })
         );
-        // Đóng ContextMenu sau khi ghim thành công
         setContextMenu(null);
       }
     } catch (error) {
@@ -594,7 +658,6 @@ const MessagesTab = ({
             return new Date(b.timestamp) - new Date(a.timestamp);
           })
         );
-        // Đóng ContextMenu sau khi bỏ ghim thành công
         setContextMenu(null);
       }
     } catch (error) {
