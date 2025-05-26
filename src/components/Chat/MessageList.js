@@ -55,7 +55,7 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
       }
       const result = await response.json();
       if (result.success) {
-        const sortedMessages = (result.messages || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        const sortedMessages = (result.messages || []).sort((a, b) => new Date(b.pinnedAt || b.timestamp) - new Date(a.pinnedAt || a.timestamp));
         setPinnedMessages(sortedMessages);
         setPinnedMessageCache(prev => ({
           ...prev,
@@ -87,7 +87,7 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
           }
           const result = await response.json();
           if (result.success) {
-            const sortedMessages = (result.messages || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            const sortedMessages = (result.messages || []).sort((a, b) => new Date(b.pinnedAt || b.timestamp) - new Date(a.pinnedAt || a.timestamp));
             setPinnedMessageCache(prev => ({
               ...prev,
               [otherUserId]: sortedMessages,
@@ -115,7 +115,7 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
       console.log('Received messagePinned/messageUnpinned event:', data);
       if (data.messages) {
         const otherUserId = chat.isGroup ? chat.targetUserId : chat.userId;
-        const sortedMessages = data.messages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        const sortedMessages = data.messages.sort((a, b) => new Date(b.pinnedAt || b.timestamp) - new Date(a.pinnedAt || a.timestamp));
         setPinnedMessages(sortedMessages);
         setPinnedMessageCache(prev => ({
           ...prev,
@@ -567,7 +567,23 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                           )}
                         </div>
                       ) : null}
-                      {(firstMessage.type === 'file' || firstMessage.type === 'pdf' || firstMessage.type === 'zip') && firstMessage.mediaUrl ? (
+                      {firstMessage.type === 'voice' && firstMessage.mediaUrl ? (
+                        <div
+                          className="media-message-container"
+                          onContextMenu={e => handleContextMenu(e, lastMessage)}
+                        >
+                          <audio controls style={{ opacity: isPending ? 0.6 : 1 }}>
+                            <source src={firstMessage.mediaUrl} type={firstMessage.mimeType} />
+                            Trình duyệt của bạn không hỗ trợ âm thanh.
+                          </audio>
+                          {isPending && (
+                            <div className="pending-indicator">
+                              <span className="pending-text">Đang gửi</span>
+                            </div>
+                          )}
+                        </div>
+                      ) : null}
+                      {(firstMessage.type === 'file' && firstMessage.mediaUrl) ? (
                         <div
                           className="media-container"
                           onContextMenu={e => handleContextMenu(e, lastMessage)}
@@ -582,8 +598,8 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                           )}
                         </div>
                       ) : (
-                        firstMessage.type !== 'text' && !firstMessage.mediaUrl && (
-                          <p style={{ opacity: isPending ? 0.6 : 1 }}>Không thể hiển thị file: {firstMessage.fileName || 'Unknown'}</p>
+                        firstMessage.type !== 'text' && firstMessage.type !== 'voice' && !firstMessage.mediaUrl && (
+                          <p style={{ opacity: isPending ? 0.6 : 1 }}>Đang gửi: {firstMessage.fileName || 'Unknown'}</p>
                         )
                       )}
                       {firstMessage.status === 'error' && firstMessage.errorMessage && (
@@ -611,6 +627,11 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                         {lastMessage.status === 'delivered' && (
                           <>
                             <LuCheckCheck className="status-icon" /> Đã nhận
+                          </>
+                        )}
+                        {!chat.isGroup && lastMessage.status === 'seen' && (
+                          <>
+                            <LuCheckCheck className="status-icon" /> Đã xem
                           </>
                         )}
                         {lastMessage.status === 'error' && 'Lỗi'}

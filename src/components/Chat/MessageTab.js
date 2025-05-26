@@ -426,6 +426,7 @@ const MessagesTab = ({
       avatar: user.avatar,
       participants: [user.userId],
       targetUserId: user.userId,
+      isPinned: chats.find(c => c.id === user.userId)?.isPinned || false, // Truyền trạng thái isPinned
     };
 
     setRecentSearches(prev => {
@@ -437,7 +438,11 @@ const MessagesTab = ({
       return updated;
     });
 
-    onSelectChat(chat);
+    onSelectChat({
+      ...chat,
+      onPinConversation: () => handlePinConversation(chat),
+      onUnpinConversation: () => handleUnpinConversation(chat),
+    });
     handleCloseModal();
   };
 
@@ -531,7 +536,11 @@ const MessagesTab = ({
       [chat.id]: 0,
     }));
 
-    onSelectChat(chat);
+    onSelectChat({
+      ...chat,
+      onPinConversation: () => handlePinConversation(chat),
+      onUnpinConversation: () => handleUnpinConversation(chat),
+    });
     handleMarkAsRead(chat.id, chat.isGroup);
   };
 

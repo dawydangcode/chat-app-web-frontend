@@ -25,6 +25,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
   const chatSocketRef = useRef(null);
   const groupSocketRef = useRef(null);
   const messageListRef = useRef(null);
+  const hasFetchedRef = useRef(false);
 
   const clearOldCache = () => {
     const maxCacheItems = 10;
@@ -125,15 +126,54 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
     }
   };
 
+  const markMessagesAsSeen = async () => {
+    // Chỉ gọi cho chat 1-1
+    if (!chat?.targetUserId || chat.isGroup) return;
+    try {
+      const endpoint = `http://localhost:3000/api/messages/user/${chat.targetUserId}`;
+      const response = await axios.get(endpoint, {
+        headers: { Authorization: `Bearer ${token.trim()}` },
+      });
+
+      if (response.data?.success) {
+        const messages = response.data.messages || [];
+        if (!Array.isArray(messages)) {
+          console.warn('Messages is not an array:', messages);
+          return;
+        }
+
+        const unreadMessages = messages.filter(msg => msg.status === 'sent' || msg.status === 'delivered');
+        for (const msg of unreadMessages) {
+          const markEndpoint = `http://localhost:3000/api/messages/seen/${msg.messageId}`;
+          try {
+            await axios.patch(markEndpoint, {}, {
+              headers: { Authorization: `Bearer ${token.trim()}` },
+            });
+          } catch (patchError) {
+            console.error(`Failed to mark message ${msg.messageId} as seen:`, patchError.response?.data || patchError.message);
+            // Continue with the next message instead of failing the loop
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error marking messages as seen:', error.response?.data || error.message);
+    }
+  };
+
   useEffect(() => {
     if (!currentUserId || !token || !chat?.targetUserId) {
       navigate('/login');
       return;
     }
 
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
+
     clearOldCache();
-    prefetchMessages();
     fetchMessages();
+    if (!chat.isGroup) {
+      markMessagesAsSeen();
+    }
 
     const fetchRecentChats = async () => {
       try {
@@ -148,8 +188,10 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
             isGroup: false,
           }));
           setRecentMessages(formattedChats);
+          prefetchMessages();
         }
       } catch (error) {
+        console.error('Error fetching recent chats:', error);
         setRecentMessages([]);
       }
     };
@@ -169,32 +211,6 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
       } catch (error) {
         console.error('Error fetching friend status:', error);
         setFriendStatus('stranger');
-      }
-    };
-
-    const markMessagesAsSeen = async () => {
-      try {
-        const endpoint = chat.isGroup
-          ? `http://localhost:3000/api/groups/messages/${chat.targetUserId}`
-          : `http://localhost:3000/api/messages/user/${chat.targetUserId}`;
-        const response = await axios.get(endpoint, {
-          headers: { Authorization: `Bearer ${token.trim()}` },
-        });
-        if (response.data.success) {
-          const unreadMessages = response.data.messages.filter(
-            msg => msg.status === 'sent' || msg.status === 'delivered'
-          );
-          for (const msg of unreadMessages) {
-            const markEndpoint = chat.isGroup
-              ? `http://localhost:3000/api/groups/messages/seen/${msg.messageId}`
-              : `http://localhost:3000/api/messages/seen/${msg.messageId}`;
-            await axios.patch(markEndpoint, {}, {
-              headers: { Authorization: `Bearer ${token.trim()}` },
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Error marking messages as seen:', error);
       }
     };
 
@@ -266,12 +282,17 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
           localStorage.setItem(`messages:${chat.targetUserId}`, JSON.stringify(updatedMessages));
           return updatedMessages;
         });
+        if (!chat.isGroup) {
+          markMessagesAsSeen();
+        }
       }
     };
 
     const handleMessageStatus = ({ messageId, status }) => {
       setMessages(prev => {
         if (!Array.isArray(prev)) return prev;
+        // For group chats, ignore 'seen' status
+        if (chat.isGroup && status === 'seen') return prev;
         const updatedMessages = prev.map(msg =>
           (msg.id === messageId || msg.messageId === messageId || msg.tempId === messageId)
             ? { ...msg, status }
@@ -326,7 +347,10 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
     }
 
     if (chat.isGroup && groupSocketRef.current) {
-      groupSocketRef.current.on('newGroupMessage', handleReceiveMessage);
+      groupSocketRef.current.on('newGroupMessage', data => {
+        const newMessage = data.message || data;
+        handleReceiveMessage(newMessage);
+      });
     }
 
     fetchRecentChats();
@@ -335,7 +359,6 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
     } else {
       setFriendStatus(null);
     }
-    markMessagesAsSeen();
 
     const messageList = messageListRef.current;
     if (messageList) {
@@ -350,13 +373,14 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
         chatSocketRef.current.off('messageDeleted', handleMessageDeleted);
       }
       if (chat.isGroup && groupSocketRef.current) {
-        groupSocketRef.current.off('newGroupMessage', handleReceiveMessage);
+        groupSocketRef.current.off('newGroupMessage');
       }
       if (messageList) {
         messageList.removeEventListener('scroll', handleScroll);
       }
+      hasFetchedRef.current = false;
     };
-  }, [chat, currentUserId, token, navigate, newMessageHighlights, unreadCounts, recentMessages]);
+  }, [chat?.targetUserId, currentUserId, token, navigate]);
 
   const handleSendMessage = async (data, onComplete) => {
     if (!currentUserId || !chat?.targetUserId || !token) {

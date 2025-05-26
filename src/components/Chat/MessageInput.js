@@ -13,8 +13,8 @@ const MessageInput = ({ onSendMessage, chat }) => {
   useEffect(() => {
     const textarea = textareaRef.current;
     if (textarea) {
-      textarea.style.height = 'auto'; // Reset chiều cao
-      textarea.style.height = `${textarea.scrollHeight}px`; // Tăng chiều cao theo nội dung
+      textarea.style.height = 'auto';
+      textarea.style.height = `${textarea.scrollHeight}px`;
     }
   }, [content]);
 
@@ -25,60 +25,69 @@ const MessageInput = ({ onSendMessage, chat }) => {
   };
 
   const handleFileUpload = async (e, isImageOnly = false) => {
-    const files = Array.from(e.target.files);
-    if (!files.length) return;
+  const files = Array.from(e.target.files);
+  if (!files.length) return;
 
-    setIsUploading(true);
+  setIsUploading(true);
 
-    for (const file of files) {
-      const maxSize = 100 * 1024 * 1024; // 100MB
-      if (file.size > maxSize) {
-        alert(`File ${file.name} quá lớn! Vui lòng chọn file nhỏ hơn 100MB.`);
-        continue;
-      }
-
-      const allowedTypes = isImageOnly
-        ? ['image/jpeg', 'image/png', 'image/gif']
-        : ['image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/webm', 'application/pdf', 'application/zip'];
-
-      if (!allowedTypes.includes(file.type)) {
-        alert(`Định dạng file ${file.name} không được hỗ trợ! Vui lòng chọn ${isImageOnly ? 'ảnh' : 'ảnh, video, PDF hoặc ZIP'}.`);
-        continue;
-      }
-
-      let messageType = 'file';
-      if (file.type.startsWith('image/')) {
-        messageType = 'image';
-      } else if (file.type.startsWith('video/')) {
-        messageType = 'video';
-      } else if (file.type === 'application/pdf') {
-        messageType = 'pdf';
-      } else if (file.type === 'application/zip') {
-        messageType = 'zip';
-      }
-
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('type', messageType);
-      formData.append('fileName', file.name);
-      formData.append('mimeType', file.type);
-
-      const formDataEntries = {};
-      for (let [key, value] of formData.entries()) {
-        formDataEntries[key] = value;
-      }
-      console.log('Sending file from MessageInput:', formDataEntries);
-
-      await new Promise((resolve) => {
-        onSendMessage(formData, () => resolve());
-      });
+  for (const file of files) {
+    const maxSize = 100 * 1024 * 1024; // 100MB
+    if (file.size > maxSize) {
+      alert(`File ${file.name} quá lớn! Vui lòng chọn file nhỏ hơn 100MB.`);
+      continue;
     }
 
-    setIsUploading(false);
-  };
+    const allowedTypes = isImageOnly
+      ? ['image/jpeg', 'image/png', 'image/gif', 'image/heic']
+      : [
+          'image/jpeg', 'image/png', 'image/gif', 'image/heic',
+          'video/mp4', 'video/webm',
+          'audio/mpeg', 'audio/wav', 'audio/mp4',
+          'application/pdf', 'application/zip', 'application/x-rar-compressed', 'application/vnd.rar',
+          'text/plain',
+          'application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/vnd.ms-powerpoint',
+          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          'application/vnd.ms-excel',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ];
+
+    if (!allowedTypes.includes(file.type)) {
+      alert(`Định dạng file ${file.name} không được hỗ trợ! Vui lòng chọn ${isImageOnly ? 'ảnh' : 'ảnh, video, âm thanh, PDF hoặc file văn bản'}.`);
+      continue;
+    }
+
+    let messageType = 'file'; // Mặc định cho tất cả file
+    if (file.type.startsWith('image/')) {
+      messageType = 'image';
+    } else if (file.type.startsWith('video/')) {
+      messageType = 'video';
+    } else if (file.type.startsWith('audio/')) {
+      messageType = 'voice';
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('type', messageType);
+    formData.append('fileName', file.name);
+    formData.append('mimeType', file.type);
+
+    const formDataEntries = {};
+    for (let [key, value] of formData.entries()) {
+      formDataEntries[key] = value;
+    }
+    console.log('Sending file from MessageInput:', formDataEntries);
+
+    await new Promise((resolve) => {
+      onSendMessage(formData, () => resolve());
+    });
+  }
+
+  setIsUploading(false);
+};
 
   const handleStickerClick = () => {
-    // Triển khai sau
     alert('Chức năng sticker sẽ được triển khai sau!');
   };
 
@@ -86,9 +95,9 @@ const MessageInput = ({ onSendMessage, chat }) => {
     <div className="message-input-wrapper">
       <div className="chatbox-bar-container">
         <div className="chatbox-bar">
-            <button onClick={handleStickerClick} className="chatbox-bar-btn-emote">
-                <FaSmile size={50} />
-              </button>
+          <button onClick={handleStickerClick} className="chatbox-bar-btn-emote">
+            <FaSmile size={50} />
+          </button>
           <label className="chatbox-bar-btn">
             <FaImage size={16} />
             <input
@@ -96,7 +105,7 @@ const MessageInput = ({ onSendMessage, chat }) => {
               onChange={(e) => handleFileUpload(e, true)}
               disabled={isUploading}
               multiple
-              accept="image/jpeg,image/png,image/gif"
+              accept="image/jpeg,image/png,image/gif,image/heic"
               style={{ display: 'none' }}
             />
           </label>
@@ -107,7 +116,7 @@ const MessageInput = ({ onSendMessage, chat }) => {
               onChange={(e) => handleFileUpload(e, false)}
               disabled={isUploading}
               multiple
-              accept="image/jpeg,image/png,image/gif,video/mp4,video/webm,application/pdf,application/zip"
+              accept="image/jpeg,image/png,image/gif,image/heic,video/mp4,video/webm,audio/mpeg,audio/wav,audio/mp4,application/pdf,application/zip,application/x-rar-compressed,application/vnd.rar,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               style={{ display: 'none' }}
             />
           </label>

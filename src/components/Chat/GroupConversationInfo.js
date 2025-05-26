@@ -1,9 +1,43 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import '../../assets/styles/ConversationInfo.css';
-import { FaUsers, FaImages, FaFileAlt, FaLink, FaLock, FaClipboard } from 'react-icons/fa';
+import { FaUsers, FaImages, FaFileAlt, FaLink, FaLock, FaDownload, FaShare, FaEllipsisH } from 'react-icons/fa';
 import { BiSolidRightArrow, BiSolidDownArrow } from "react-icons/bi";
 import { RiGroupLine } from "react-icons/ri";
+import { LiaStopwatchSolid } from "react-icons/lia";
+import { MdToggleOff, MdToggleOn } from "react-icons/md";
+import { IoWarningOutline } from "react-icons/io5";
+import { VscTrash } from "react-icons/vsc";
+import { RxExit } from "react-icons/rx";
+
+
+// Hàm tính thời gian gửi file
+const getTimeDifference = (timestamp) => {
+  if (!timestamp) return '';
+  const now = new Date();
+  const fileTime = new Date(timestamp);
+  const diffInSeconds = Math.floor((now - fileTime) / 1000);
+
+  if (diffInSeconds < 10) return 'Vài giây';
+  else if (diffInSeconds < 60) return `${diffInSeconds} giây`;
+  else if (diffInSeconds < 3600) {
+    const minutes = Math.floor(diffInSeconds / 60);
+    return `${minutes} phút`;
+  } else if (diffInSeconds < 86400) {
+    const hours = Math.floor(diffInSeconds / 3600);
+    return `${hours} giờ`;
+  } else if (diffInSeconds < 604800) {
+    const days = Math.floor(diffInSeconds / 86400);
+    return days === 1 ? 'Hôm qua' : `${days} ngày trước`;
+  } else if (diffInSeconds < 691200) return '7 ngày trước';
+  else {
+    return fileTime.toLocaleDateString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+  }
+};
 
 const GroupConversationInfo = ({ chat }) => {
   const [isEditGroupNameModalOpen, setIsEditGroupNameModalOpen] = useState(false);
@@ -27,6 +61,9 @@ const GroupConversationInfo = ({ chat }) => {
     security: true,
     board: true,
   });
+  const [contextMenu, setContextMenu] = useState(null);
+  const [isHidden, setIsHidden] = useState(false); // Trạng thái ẩn trò chuyện
+  const contextMenuRef = useRef(null);
 
   const token = localStorage.getItem('token');
   const currentUserId = localStorage.getItem('userId');
@@ -45,7 +82,6 @@ const GroupConversationInfo = ({ chat }) => {
         headers: { Authorization: `Bearer ${token.trim()}` },
       });
       if (response.data.success) {
-        console.log('Members fetched:', response.data.data.members); // Debug log
         setMembers(response.data.data.members || []);
       } else {
         console.error('Failed to fetch members:', response.data.error);
@@ -80,7 +116,7 @@ const GroupConversationInfo = ({ chat }) => {
           .map((msg) => ({
             type: msg.type,
             url: msg.mediaUrl,
-            fileName: msg.fileName,
+            fileName: msg.fileName || `file_${msg.messageId}`,
             timestamp: msg.timestamp,
           }));
 
@@ -96,7 +132,6 @@ const GroupConversationInfo = ({ chat }) => {
 
   useEffect(() => {
     if (chat?.isGroup) {
-      console.log('Current User ID:', currentUserId); // Debug log
       fetchGroupMembers();
       fetchGroupMessages();
     }
@@ -192,10 +227,87 @@ const GroupConversationInfo = ({ chat }) => {
     alert('Chức năng xem tất cả sẽ được triển khai sau!');
   };
 
+  const handleViewAllFiles = () => {
+    alert('Chức năng xem tất cả file sẽ được triển khai sau!');
+  };
+
+  const getFileIcon = (fileName) => {
+    const extension = fileName.split('.').pop().toLowerCase();
+    switch (extension) {
+      case 'pdf':
+        return 'https://chat.zalo.me/assets/icon-photo.1ef82b2ce3e302f5e186a8c54f74252f.svg';
+      case 'doc':
+      case 'docx':
+        return 'https://chat.zalo.me/assets/icon-word.398880844ced42f82eba2ace17f5d511.svg';
+      case 'xls':
+      case 'xlsx':
+        return 'https://chat.zalo.me/assets/icon-excel.8a677940b84360d0a750fc4470354191.svg';
+      default:
+        return 'https://chat.zalo.me/assets/icon-file.1d5f8d6e2d1e7b4927a8e672d3d8f81.svg';
+    }
+  };
+
+  const handleShareFile = (file) => {
+    alert(`Chuyển tiếp file: ${file.fileName} (Chức năng sẽ được triển khai sau!)`);
+  };
+
+  const handleContextMenu = (event, file) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const { clientX, clientY } = event;
+    setContextMenu({
+      x: clientX,
+      y: clientY,
+      file,
+    });
+  };
+
+  const handleContextMenuAction = (action, file) => {
+    switch (action) {
+      case 'delete':
+        alert(`Xóa file: ${file.fileName} (Chức năng sẽ được triển khai sau!)`);
+        break;
+      case 'copyLink':
+        navigator.clipboard.writeText(file.url).then(() => {
+          alert('Đã sao chép liên kết file!');
+        }).catch(() => {
+          alert('Không thể sao chép liên kết!');
+        });
+        break;
+      default:
+        break;
+    }
+    setContextMenu(null);
+  };
+
+  const handleToggleHideChat = () => {
+    setIsHidden(!isHidden);
+    alert(`${isHidden ? 'Hiện' : 'Ẩn'} trò chuyện (Chức năng sẽ được triển khai sau!)`);
+  };
+
+  const handleAutoDeleteMessages = () => {
+    alert('Chức năng tin nhắn tự xóa sẽ được triển khai sau!');
+  };
+
+  const handleReportChat = () => {
+    alert('Chức năng báo xấu sẽ được triển khai sau!');
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(event.target)) {
+        setContextMenu(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   if (isMembersPage) {
     const isAdmin = members.find(member => member.userId === currentUserId && member.role === 'admin');
-    console.log('Is Admin:', isAdmin); // Debug log
-  
     return (
       <div className="members-page">
         <div className="members-header">
@@ -210,54 +322,49 @@ const GroupConversationInfo = ({ chat }) => {
           </button>
           <div className="members-list">
             {members.length > 0 ? (
-              members.map((member) => {
-                console.log('Member:', member); // Debug log
-                return (
-                  <div key={member.userId} className="member-item">
-                    <img
-                      src={member.avatar || 'https://placehold.co/40x40'}
-                      alt="Avatar"
-                      className="member-avatar"
-                    />
-                    <div className="member-info">
-                      <div className="member-details">
-                        <p>{member.userId === currentUserId ? 'Bạn' : member.name || 'Không có tên'}</p>
-                        {member.role === 'admin' && <span className="admin-label">Trưởng nhóm</span>}
-                      </div>
-                      {/* Chỉ hiển thị nút nếu người dùng hiện tại là admin và thành viên không phải admin */}
-                      {isAdmin && member.userId !== currentUserId && member.role !== 'admin' && (
-                        <div className="member-actions">
-                          <button
-                            className="kick-btn"
-                            onClick={() => {
-                              setSelectedMember(member);
-                              setIsKickMemberModalOpen(true);
-                            }}
-                          >
-                            Đá khỏi nhóm
-                          </button>
-                          <button
-                            className="assign-role-btn"
-                            onClick={() => {
-                              setSelectedMember(member);
-                              setIsAssignRoleModalOpen(true);
-                            }}
-                          >
-                            Gán vai trò
-                          </button>
-                        </div>
-                      )}
+              members.map((member) => (
+                <div key={member.userId} className="member-item">
+                  <img
+                    src={member.avatar || 'https://placehold.co/40x40'}
+                    alt="Avatar"
+                    className="member-avatar"
+                  />
+                  <div className="member-info">
+                    <div className="member-details">
+                      <p>{member.userId === currentUserId ? 'Bạn' : member.name || 'Không có tên'}</p>
+                      {member.role === 'admin' && <span className="admin-label">Trưởng nhóm</span>}
                     </div>
+                    {isAdmin && member.userId !== currentUserId && member.role !== 'admin' && (
+                      <div className="member-actions">
+                        <button
+                          className="kick-btn"
+                          onClick={() => {
+                            setSelectedMember(member);
+                            setIsKickMemberModalOpen(true);
+                          }}
+                        >
+                          Đá khỏi nhóm
+                        </button>
+                        <button
+                          className="assign-role-btn"
+                          onClick={() => {
+                            setSelectedMember(member);
+                            setIsAssignRoleModalOpen(true);
+                          }}
+                        >
+                          Gán vai trò
+                        </button>
+                      </div>
+                    )}
                   </div>
-                );
-              })
+                </div>
+              ))
             ) : (
               <p>Không có thành viên nào.</p>
             )}
           </div>
         </div>
-  
-        {/* Phần modal không thay đổi, giữ nguyên */}
+
         {isKickMemberModalOpen && (
           <div className="modal-overlay">
             <div className="kick-member-modal">
@@ -281,7 +388,7 @@ const GroupConversationInfo = ({ chat }) => {
             </div>
           </div>
         )}
-  
+
         {isAssignRoleModalOpen && (
           <div className="modal-overlay">
             <div className="assign-role-modal">
@@ -318,6 +425,7 @@ const GroupConversationInfo = ({ chat }) => {
   }
 
   const recentMediaFiles = mediaFiles.slice(0, 6);
+  const recentFiles = files.slice(0, 3);
 
   return (
     <div className="conversation-info">
@@ -401,22 +509,99 @@ const GroupConversationInfo = ({ chat }) => {
         </h4>
         {expandedSections.files && (
           <div className="section-content">
-            {files.length > 0 ? (
-              <div className="file-list">
-                {files.map((file, index) => (
-                  <div key={index} className="file-item">
-                    <a href={file.url} target="_blank" rel="noopener noreferrer">
-                      {file.fileName}
-                    </a>
-                  </div>
-                ))}
-              </div>
+            {recentFiles.length > 0 ? (
+              <>
+                <div className="file-list">
+                  {recentFiles.map((file, index) => (
+                    <div key={index} className="file-item-wrapper">
+                      <a
+                        href={file.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="file-item"
+                      >
+                        <img
+                          src={getFileIcon(file.fileName)}
+                          alt="File icon"
+                          className="file-icon"
+                        />
+                        <div className="file-info">
+                          <p className="file-name">{file.fileName}</p>
+                          <p className="file-time-difference">
+                            {getTimeDifference(file.timestamp)}
+                          </p>
+                        </div>
+                      </a>
+                      <div className="file-actions">
+                        <button
+                          className="file-action-btn"
+                          title="Tải xuống"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            window.open(file.url, '_blank');
+                          }}
+                        >
+                          <FaDownload size={18} />
+                        </button>
+                        <button
+                          className="file-action-btn"
+                          title="Chia sẻ"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleShareFile(file);
+                          }}
+                        >
+                          <FaShare size={18} />
+                        </button>
+                        <button
+                          className="file-action-btn"
+                          title="Thêm"
+                          onClick={(e) => handleContextMenu(e, file)}
+                        >
+                          <FaEllipsisH size={18} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {files.length > 3 && (
+                  <button className="view-all-btn" onClick={handleViewAllFiles}>
+                    Xem tất cả ({files.length})
+                  </button>
+                )}
+              </>
             ) : (
-              <p>Chưa có File được chia sẻ</p>
+              <p>Chưa có file được chia sẻ.</p>
             )}
           </div>
         )}
       </div>
+
+      {contextMenu && (
+        <div
+          className="context-menu"
+          ref={contextMenuRef}
+          style={{
+            top: contextMenu.y,
+            left: contextMenu.x,
+            position: 'fixed',
+            zIndex: 1000,
+          }}
+        >
+          <div
+            className="context-menu-item"
+            onClick={() => handleContextMenuAction('copyLink', contextMenu.file)}
+          >
+            Sao chép liên kết
+          </div>
+          <div
+            className="context-menu-item context-menu-item-danger"
+            onClick={() => handleContextMenuAction('delete', contextMenu.file)}
+          >
+            Xóa file
+          </div>
+        </div>
+      )}
 
       <div className="info-section">
         <h4 onClick={() => toggleSection('links')} className="section-title">
@@ -435,21 +620,41 @@ const GroupConversationInfo = ({ chat }) => {
         </h4>
         {expandedSections.security && (
           <div className="section-content">
-            <p>Sẽ triển khai sau</p>
+            <div className="security-item" onClick={handleAutoDeleteMessages}>
+              <LiaStopwatchSolid size={24} className="security-item-icon" />
+              <div className="security-item-info">
+                <p className="security-item-title">Tin nhắn tự xóa</p>
+                <p className="security-item-subtitle">Không bao giờ</p>
+              </div>
+            </div>
+            <div className="security-item">
+              <div className="security-item-info">
+                <p className="security-item-title">Ẩn trò chuyện</p>
+              </div>
+              <button className="security-toggle-btn" onClick={handleToggleHideChat}>
+                {isHidden ? <MdToggleOn size={24} className="toggle-on" /> : <MdToggleOff size={24} className="toggle-off" />}
+              </button>
+            </div>
+            <div className="security-item" onClick={handleReportChat}>
+              <IoWarningOutline size={24} className="security-item-icon" />
+              <div className="security-item-info">
+                <p className="security-item-subtitle" style={{fontWeight:500 }}>Báo xấu</p>
+              </div>
+            </div>
+            <div className="security-item" onClick={() => setIsDeleteChatModalOpen(true)}>
+              <VscTrash size={24} className="security-item-icon danger-text" />
+              <div className="security-item-info">
+                <p className="security-item-subtitle" style={{ color: '#c31818', fontWeight:500 }}>Xóa lịch sử trò chuyện</p>
+              </div>
+            </div>
+            <div className="security-item" onClick={() => setIsLeaveGroupModalOpen(true)}>
+              <RxExit  size={24} className="security-item-icon danger-text" />
+              <div className="security-item-info">
+                <p className="security-item-subtitle" style={{ color: '#c31818', fontWeight:500 }}>Rời nhóm</p>
+              </div>
+            </div>
           </div>
         )}
-      </div>
-
-      <div className="info-section">
-        <h4 className="danger-text" onClick={() => setIsDeleteChatModalOpen(true)}>
-          Xóa lịch sử trò chuyện
-        </h4>
-      </div>
-
-      <div className="info-section">
-        <h4 className="danger-text" onClick={() => setIsLeaveGroupModalOpen(true)}>
-          Rời nhóm
-        </h4>
       </div>
 
       {isEditGroupNameModalOpen && (
