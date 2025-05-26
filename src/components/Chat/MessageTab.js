@@ -121,7 +121,7 @@ const MessagesTab = ({
           name: conv.displayName || 'Không có tên',
           phoneNumber: conv.phoneNumber || '',
           avatar: conv.avatar || 'https://placehold.co/50x50',
-          lastMessage: conv.lastMessage?.status === 'recalled' ? '(Tin nhắn đã thu hồi)' : conv.lastMessage?.content || 'Chưa có tin nhắn',
+          lastMessage: conv.lastMessage?.isRecalled ? '(Tin nhắn đã bị thu hồi)' : conv.lastMessage?.content || 'Chưa có tin nhắn', // Sửa điều kiện để kiểm tra isRecalled
           lastMessageSender: conv.lastMessage?.senderId === currentUserId ? 'Bạn' : '',
           timestamp: conv.lastMessage?.timestamp || new Date().toISOString(),
           isMuted: conv.isMuted || false,
@@ -135,7 +135,7 @@ const MessagesTab = ({
           id: group.groupId,
           name: group.name || 'Nhóm không tên',
           avatar: group.avatar || 'https://placehold.co/50x50',
-          lastMessage: group.lastMessage?.isRecalled ? '(Tin nhắn đã thu hồi)' : group.lastMessage?.content || 'Chưa có tin nhắn',
+          lastMessage: group.lastMessage?.isRecalled ? '(Tin nhắn đã bị thu hồi)' : group.lastMessage?.content || 'Chưa có tin nhắn', // Sửa điều kiện để kiểm tra isRecalled
           lastMessageSender: group.lastMessage?.senderId === currentUserId ? 'Bạn' : group.lastMessage?.sender?.name || 'Thành viên nhóm',
           timestamp: group.lastMessage?.timestamp || group.createdAt || new Date().toISOString(),
           isMuted: false,
@@ -304,7 +304,7 @@ const MessagesTab = ({
         const updatedChats = [...prevChats];
         updatedChats[chatIndex] = {
           ...updatedChats[chatIndex],
-          lastMessage: message.status === 'recalled' ? '(Tin nhắn đã thu hồi)' : message.content || 'Chưa có tin nhắn',
+          lastMessage: message.isRecalled ? '(Tin nhắn đã bị thu hồi)' : message.content || 'Chưa có tin nhắn', // Sửa điều kiện để kiểm tra isRecalled
           lastMessageSender: message.senderId === currentUserId ? 'Bạn' : updatedChats[chatIndex].name,
           timestamp: message.timestamp || message.createdAt || new Date().toISOString(),
         };

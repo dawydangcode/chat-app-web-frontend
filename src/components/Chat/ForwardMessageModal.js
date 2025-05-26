@@ -2,10 +2,9 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import '../../assets/styles/ForwardMessageModal.css';
 
-const ForwardMessageModal = ({ messageId, onForwardMessage, onClose }) => {
+const ForwardMessageModal = ({ message, onForwardMessage, onClose }) => {
   const [conversations, setConversations] = useState([]);
-  const [selectedConversation, setSelectedConversation] = useState(null);
-  const currentUserId = JSON.parse(localStorage.getItem('user') || '{}')?.userId;
+  const [selectedConversations, setSelectedConversations] = useState([]);
 
   const fetchConversations = async () => {
     const token = localStorage.getItem('token');
@@ -52,29 +51,53 @@ const ForwardMessageModal = ({ messageId, onForwardMessage, onClose }) => {
   }, []);
 
   const handleSelectConversation = (conversation) => {
-    setSelectedConversation(conversation);
+    setSelectedConversations(prev => {
+      if (prev.some(conv => conv.id === conversation.id)) {
+        return prev.filter(conv => conv.id !== conversation.id);
+      } else {
+        return [...prev, conversation];
+      }
+    });
   };
 
   const handleForward = () => {
-    if (!selectedConversation) {
-      alert('Vui lòng chọn một cuộc trò chuyện để chuyển tiếp.');
+    if (selectedConversations.length === 0) {
+      alert('Vui lòng chọn ít nhất một cuộc trò chuyện để gửi.');
       return;
     }
 
-    onForwardMessage(messageId, selectedConversation.id);
+    selectedConversations.forEach(conversation => {
+      onForwardMessage(message.id || message.messageId, conversation.id);
+    });
     onClose();
+  };
+
+  const getMessagePreview = () => {
+    if (message.type === 'text') {
+      return message.content;
+    } else if (message.type === 'image' || message.type === 'video') {
+      return `[${message.type === 'image' ? 'Hình ảnh' : 'Video'}]`;
+    } else if (message.type === 'voice') {
+      return '[Tin nhắn thoại]';
+    } else if (message.type === 'file') {
+      return `[Tệp: ${message.fileName || 'Không xác định'}]`;
+    }
+    return '[Không xác định]';
   };
 
   return (
     <div className="forward-modal">
       <div className="forward-modal-content">
         <h3>Chuyển tiếp tin nhắn</h3>
+        <div className="message-preview">
+          <p><strong>Tin nhắn:</strong> {getMessagePreview()}</p>
+        </div>
         <div className="conversation-list">
           {conversations.length > 0 ? (
             conversations.map(conv => (
               <div
                 key={conv.id}
-                className={`conversation-item ${selectedConversation?.id === conv.id ? 'selected' : ''}`}
+                className={`conversation-item ${selectedConversations.some(c => c.id === conv.id) ? 'selected' : ''}`}
                 onClick={() => handleSelectConversation(conv)}
               >
                 <img
@@ -94,8 +117,8 @@ const ForwardMessageModal = ({ messageId, onForwardMessage, onClose }) => {
           )}
         </div>
         <div className="forward-modal-actions">
-          <button className="forward-btn" onClick={handleForward} disabled={!selectedConversation}>
-            Chuyển tiếp
+          <button className="forward-btn" onClick={handleForward} disabled={selectedConversations.length === 0}>
+            Gửi
           </button>
           <button className="cancel-btn" onClick={onClose}>
             Hủy

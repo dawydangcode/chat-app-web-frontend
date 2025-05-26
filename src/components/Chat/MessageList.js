@@ -215,7 +215,7 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
         console.log('Reply to message:', message);
         break;
       case 'forward':
-        setMessageToForward(message.id || message.messageId);
+        setMessageToForward(message);
         setShowForwardModal(true);
         break;
       case 'copy':
@@ -454,11 +454,7 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
               </div>
             )}
           </>
-        ) : (
-          <div className="pinned-message-placeholder">
-            <span>Chưa có tin nhắn ghim nào.</span>
-          </div>
-        )}
+        ) : null}
       </div>
 
       {groupedMessages.map((group, groupIndex) => {
@@ -556,7 +552,7 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                           {lastMessage.status !== 'recalled' && (
                             <button
                               onClick={() => {
-                                setMessageToForward(lastMessage.id || lastMessage.messageId);
+                                setMessageToForward(lastMessage);
                                 setShowForwardModal(true);
                               }}
                             >
@@ -749,7 +745,7 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
 
       {showForwardModal && (
         <ForwardMessageModal
-          messageId={messageToForward}
+          message={messageToForward}
           onForwardMessage={onForwardMessage}
           onClose={handleCloseForwardModal}
         />
