@@ -104,12 +104,14 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
     };
   }, [chat, socket]);
 
+  // Cuộn xuống cuối danh sách tin nhắn khi messages thay đổi
   useEffect(() => {
     if (messageListRef.current) {
       messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
     }
   }, [messages]);
 
+  // Đóng context menu khi click ra ngoài
   useEffect(() => {
     const handleClickOutside = () => {
       setContextMenu({ visible: false, x: 0, y: 0, message: null });
@@ -396,7 +398,6 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
       <div className="pinned-messages-container">
         {pinnedMessages.length > 0 ? (
           <>
-            {/* Hiển thị tin nhắn ghim mới nhất hoặc danh sách tin nhắn ghim */}
             {!showPinnedList ? (
               <div className="pinned-message">
                 <div className="pinned-message-left">
@@ -525,6 +526,7 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
           <div
             key={groupIndex}
             className={`message ${isCurrentUser ? 'message-right' : 'message-left'} ${isGroupMessage ? 'media-message' : ''} ${isPending ? 'message-pending' : ''}`}
+            id={`message-${lastMessage.id || lastMessage.messageId}`}
           >
             {showAvatarAndName && (
               <div className="message-sender-info">
@@ -644,18 +646,18 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                           {new Date(lastMessage.timestamp).toLocaleTimeString('vi-VN', {
                             hour: '2-digit',
                             minute: '2-digit',
-                            hour12: false, // Sử dụng định dạng 24 giờ
+                            hour12: false,
                           })}
                         </span>
                       )}
                     </div>
                   )}
                   <div className="message-meta">
-                    {isCurrentUser && !chat.isGroup && showStatus && (
+                    {isCurrentUser && showStatus && (
                       <span className={`message-status ${lastMessage.status}`}>
                         {lastMessage.status === 'sent' && (
                           <>
-                            <span className="status-icon">✓</span> Đã gửi
+                            <LuCheck className="status-icon" /> Đã gửi
                           </>
                         )}
                         {lastMessage.status === 'delivered' && (
@@ -663,7 +665,6 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                             <LuCheckCheck className="status-icon" /> Đã nhận
                           </>
                         )}
-                        {lastMessage.status === 'seen' && 'Đã xem'}
                         {lastMessage.status === 'error' && 'Lỗi'}
                         {isPending && (
                           <span className="pending-text">

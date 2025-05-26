@@ -180,8 +180,9 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
     }
 
     const handleReceiveMessage = (newMessage) => {
+      console.log('Received message:', newMessage);
       if (
-        (newMessage.senderId === chat.targetUserId || newMessage.receiverId === chat.targetUserId) &&
+        (newMessage.senderId === chat.targetUserId || newMessage.receiverId === chat.targetUserId || newMessage.groupId === chat.targetUserId) &&
         newMessage.senderId !== currentUserId
       ) {
         setMessages((prev) => {
@@ -191,10 +192,10 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
           );
           if (existingMessageIndex !== -1) {
             return prev.map((msg, index) =>
-              index === existingMessageIndex ? { ...newMessage, id: newMessage.messageId } : msg
+              index === existingMessageIndex ? { ...newMessage, id: newMessage.messageId, status: 'sent' } : msg
             );
           }
-          const updatedMessages = [...prev, newMessage];
+          const updatedMessages = [...prev, { ...newMessage, status: 'sent' }];
           setMessageCache((prevCache) => ({
             ...prevCache,
             [chat.targetUserId]: updatedMessages,

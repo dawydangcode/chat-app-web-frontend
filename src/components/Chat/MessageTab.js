@@ -25,15 +25,15 @@ const getTimeDifference = (timestamp) => {
   const diffInSeconds = Math.floor((now - lastMessageTime) / 1000);
 
   if (diffInSeconds < 10) {
-    return 'Vừa xong';
+    return 'Vài giây';
   } else if (diffInSeconds < 60) {
-    return `${diffInSeconds} giây trước`;
+    return `${diffInSeconds} giây`;
   } else if (diffInSeconds < 3600) {
     const minutes = Math.floor(diffInSeconds / 60);
-    return `${minutes} phút trước`;
+    return `${minutes} phút`;
   } else if (diffInSeconds < 86400) {
     const hours = Math.floor(diffInSeconds / 3600);
-    return `${hours} giờ trước`;
+    return `${hours} giờ`;
   } else if (diffInSeconds < 604800) {
     const days = Math.floor(diffInSeconds / 86400);
     return days === 1 ? 'Hôm qua' : `${days} ngày trước`;
