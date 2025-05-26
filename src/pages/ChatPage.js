@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { initializeSocket, disconnectSocket } from '../utils/socket'; // Sử dụng socket từ utils
 import SidebarHeader from '../components/Chat/SidebarHeader';
 import ChatListHeader from '../components/Chat/ChatListHeader';
 import MessagesTab from '../components/Chat/MessageTab';
@@ -35,6 +36,52 @@ const ChatPage = () => {
 
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const currentUserId = currentUser?.userId;
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      window.location.href = '/login';
+      return;
+    }
+
+    const friendSocket = initializeSocket(token, '/friend');
+
+    friendSocket.on('friend:cancelRequest:success', (data) => {
+      console.log('Received friend:cancelRequest:success', data);
+      alert('Đã thu hồi lời mời kết bạn!');
+      fetchSentFriendRequests();
+    });
+
+    friendSocket.on('friend:requestCancelled', (data) => {
+      console.log('Received friend:requestCancelled', data);
+      fetchFriendRequests();
+    });
+
+    friendSocket.on('friend:requestReceived', (data) => {
+      console.log('Received friend:requestReceived', data);
+      fetchFriendRequests();
+    });
+
+    friendSocket.on('friend:acceptRequest:success', (data) => {
+      console.log('Received friend:acceptRequest:success', data);
+      fetchFriends();
+      fetchSentFriendRequests();
+    });
+
+    friendSocket.on('friend:rejectRequest:success', (data) => {
+      console.log('Received friend:rejectRequest:success', data);
+      fetchFriendRequests();
+    });
+
+    return () => {
+      friendSocket.off('friend:cancelRequest:success');
+      friendSocket.off('friend:requestCancelled');
+      friendSocket.off('friend:requestReceived');
+      friendSocket.off('friend:acceptRequest:success');
+      friendSocket.off('friend:rejectRequest:success');
+      disconnectSocket('/friend');
+    };
+  }, []);
 
   const fetchFriendRequests = async () => {
     const token = localStorage.getItem('token');
@@ -191,6 +238,8 @@ const ChatPage = () => {
           name: group.name,
           avatar: group.avatar || 'https://placehold.co/40x40',
           createdAt: formatDateTime(group.createdAt),
+          memberCount: group.memberCount || 0, // Thêm số thành viên nhóm
+          isGroup: true, // Đánh dấu là nhóm để ChatWindow xử lý
         }));
         setGroups(formattedGroups);
       } else {
@@ -337,6 +386,8 @@ const ChatPage = () => {
       name: newGroup.name,
       avatar: newGroup.avatar || 'https://placehold.co/40x40',
       createdAt: formatDateTime(newGroup.createdAt),
+      memberCount: newGroup.memberCount || 0,
+      isGroup: true,
     };
     setGroups([...groups, formattedGroup]);
   };
@@ -372,9 +423,7 @@ const ChatPage = () => {
       );
 
       if (response.data && response.data.message) {
-        alert('Đã chấp nhận lời mời kết bạn!');
-        fetchFriendRequests();
-        fetchFriends();
+        // Không cần alert ở đây vì socket sẽ xử lý
       }
     } catch (error) {
       alert('Lỗi khi chấp nhận lời mời: ' + (error.response?.data?.message || error.message));
@@ -391,8 +440,7 @@ const ChatPage = () => {
       );
 
       if (response.data && response.data.message) {
-        alert('Đã từ chối lời mời kết bạn!');
-        fetchFriendRequests();
+        // Không cần alert ở đây vì socket sẽ xử lý
       }
     } catch (error) {
       alert('Lỗi khi từ chối lời mời: ' + (error.response?.data?.message || error.message));
@@ -402,18 +450,20 @@ const ChatPage = () => {
   const handleCancelRequest = async (requestId) => {
     const token = localStorage.getItem('token');
     try {
-      const response = await axios.post(
+      const friendSocket = initializeSocket(token, '/friend');
+      friendSocket.emit('friend:cancelRequest', { requestId }, (response) => {
+        if (!response.success) {
+          alert('Lỗi khi thu hồi lời mời: ' + response.message);
+        }
+      });
+
+      await axios.post(
         'http://localhost:3000/api/friends/cancel',
         { requestId },
         { headers: { Authorization: `Bearer ${token.trim()}` } }
       );
-
-      if (response.data && response.data.message) {
-        alert('Đã thu hồi lời mời kết bạn!');
-        fetchSentFriendRequests();
-      }
     } catch (error) {
-      alert('Lỗi khi thu hồi lời mời: ' + (error.response?.data?.message || error.message));
+      console.error('API error in handleCancelRequest:', error);
     }
   };
 
@@ -472,7 +522,7 @@ const ChatPage = () => {
               setNewMessageHighlights={setNewMessageHighlights}
               unreadCounts={unreadCounts}
               setUnreadCounts={setUnreadCounts}
-              selectedChat={selectedChat} // Thêm prop này
+              selectedChat={selectedChat}
             />
           )}
           {activeTab === 'contacts' && (
@@ -538,15 +588,26 @@ const ChatPage = () => {
                 <div className="groups-list">
                   {groups.length > 0 ? (
                     groups.map((group) => (
-                      <div key={group.id} className="group-item">
+                      <div
+                        key={group.id}
+                        className={`group-item ${
+                          selectedChat && selectedChat.id === group.id ? 'selected-group' : ''
+                        }`}
+                        onClick={() => handleSelectChat(group)} // Mở chat nhóm khi nhấn
+                      >
                         <img
                           src={group.avatar}
-                          alt="Avatar"
+                          alt="Group Avatar"
                           className="group-avatar"
                         />
                         <div className="group-info">
-                          <p className="group-name">{group.name}</p>
-                          <p className="group-created-at">Tạo vào: {group.createdAt}</p>
+                          <div className="group-header-row">
+                            <p className="group-name">{group.name}</p>
+                            <p className="group-created-at">{group.createdAt}</p>
+                          </div>
+                          <p className="group-member-count">
+                            {group.memberCount} thành viên
+                          </p>
                         </div>
                       </div>
                     ))

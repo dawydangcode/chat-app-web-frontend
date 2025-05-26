@@ -9,7 +9,7 @@ body {
 
 .parent {
   display: grid;
-  grid-template-columns: 70px 350px 1fr 300px; /* Thêm cột cho div4 */
+  grid-template-columns: 70px 350px 1fr 300px;
   grid-template-rows: 1fr;
   height: 100vh;
   width: 100vw;
@@ -31,13 +31,13 @@ body {
   flex-direction: column;
 }
 .div3 {
-  grid-area: 1 / 3 / 6 / 4; /* div3 chiếm cột 3 */
+  grid-area: 1 / 3 / 6 / 4;
 }
 .div3.expanded {
-  grid-area: 1 / 3 / 6 / 5; /* Khi div4 ẩn, div3 mở rộng sang cột 4 */
+  grid-area: 1 / 3 / 6 / 5;
 }
 .div4 {
-  grid-area: 1 / 4 / 6 / 5; /* div4 chiếm cột 4 */
+  grid-area: 1 / 4 / 6 / 5;
   background-color: #fff;
   border-left: 1px solid #ddd;
 }
@@ -79,7 +79,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  height: 100%; /* Đảm bảo chiều cao chiếm toàn bộ Sidebar */
+  height: 100%;
 }
 
 .sidebar-actions button {
@@ -98,7 +98,7 @@ body {
 
 .sidebar-actions button:last-child {
   padding-bottom: 30px;
-  margin-top: auto; /* Đẩy nút cuối cùng xuống dưới cùng */
+  margin-top: auto;
 }
 
 /* MessagesTab (div2) */
@@ -179,7 +179,6 @@ body {
   cursor: pointer;
   position: relative;
   height: 60px;
-
 }
 
 .chat-item:hover {
@@ -300,7 +299,6 @@ body {
   margin: 0;
   color: #666;
   font-size: 1rem;
-  
 }
 
 .toggle-info-btn {
@@ -476,6 +474,10 @@ body {
   color: #333;
 }
 
+.add-friend-action-btn:hover,
+.modal-cancel-btn:hover {
+  background-color: #e5e7eb;
+}
 .modal-search-btn,
 .message-action-btn {
   background-color: #005AE0;
@@ -717,13 +719,12 @@ body {
   border: 1px solid #ccc;
 }
 
-.friend-request-header{
-    font-size: 40px;
-    font-weight: 500;
-    line-height: 1.5;
-    color: var(--text-primary);
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    
+.friend-request-header {
+  font-size: 40px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--text-primary);
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
 .contacts-container {
@@ -803,6 +804,69 @@ body {
   border: 1px solid #ccc;
 }
 
+/* Cải thiện giao diện danh sách nhóm */
+.groups-list {
+  padding: 10px;
+}
+
+.group-item {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.group-item:hover {
+  background-color: #f1f2f4; /* Hiệu ứng hover */
+}
+
+.group-item.selected-group {
+  background-color: #e5f1ff; /* Màu nền khi nhóm được chọn */
+}
+
+.group-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  margin-right: 10px;
+  object-fit: cover;
+}
+
+.group-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.group-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.group-name {
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.5;
+  color: #081b3a;
+  margin: 0;
+}
+
+.group-created-at {
+  font-size: 0.8em;
+  color: #999;
+  margin: 0;
+}
+
+.group-member-count {
+  font-size: 0.9em;
+  color: #666;
+  margin: 5px 0 0;
+}
+
 /* Viền đậm cho cuộc hội thoại có tin nhắn mới */
 .chat-item.new-message-highlight {
   font-weight: 600;
@@ -813,12 +877,12 @@ body {
 }
 
 .chat-item.new-message-highlight:hover {
-  background-color: #f1f2f4; /* Màu nền xanh nhạt khi có tin nhắn mới */
+  background-color: #f1f2f4;
 }
 
 /* Làm nổi bật cuộc hội thoại đang được chọn */
 .chat-item.selected-chat {
-  background-color: #e5f1ff; /* Màu nền xanh nhạt khi được chọn */
+  background-color: #e5f1ff;
   transition: background-color 0.3s ease;
 }
 

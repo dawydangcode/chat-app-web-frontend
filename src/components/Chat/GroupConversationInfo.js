@@ -238,15 +238,15 @@ const GroupConversationInfo = ({ chat }) => {
     const extension = fileName.split('.').pop().toLowerCase();
     switch (extension) {
       case 'pdf':
-        return 'https://chat.zalo.me/assets/icon-photo.1ef82b2ce3e302f5e186a8c54f74252f.svg';
+        return 'https://chat.zalo.me/assets/icon-pdf.51cd88ff166552930d03701ff5cbd1d8.svg';
       case 'doc':
       case 'docx':
-        return 'https://chat.zalo.me/assets/styles/icon-word.398880e44ced42f82eba2ace17f5d511.svg';
+        return 'https://chat.zalo.me/assets/icon-pdf.51cd88ff166552930d03701ff5cbd1d8.svg';
       case 'xls':
       case 'xlsx':
-        return 'https://chat.zalo.me/assets/styles/icon-excel.8a677940b84360d0a750fc4470354191.svg';
+        return 'https://chat.zalo.me/assets/icon-pdf.51cd88ff166552930d03701ff5cbd1d8.svg';
       default:
-        return 'https://chat.zalo.me/assets/icon-file.1d5f8d6e2d1e7b4927a8e672d3d8f81.svg';
+        return 'https://chat.zalo.me/assets/icon-pdf.51cd88ff166552930d03701ff5cbd1d8.svg';
     }
   };
 
