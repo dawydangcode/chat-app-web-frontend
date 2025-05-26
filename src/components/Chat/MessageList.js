@@ -2,12 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import '../../assets/styles/ChatWindow.css';
 import '../../assets/styles/MessageList.css';
 import { FaUndo, FaTrash, FaShare, FaReply, FaCopy, FaThumbtack, FaChevronUp, FaChevronDown, FaEllipsisH } from 'react-icons/fa';
-import { BiMessageRoundedDetail } from "react-icons/bi";
+import { BiMessageRoundedDetail } from 'react-icons/bi';
 import { LuCheckCheck, LuCheck } from 'react-icons/lu';
-import { IoChevronDownSharp } from "react-icons/io5";
-import { PiDotsThreeLight } from "react-icons/pi";
+import { IoChevronDownSharp } from 'react-icons/io5';
 
-const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, onForwardMessage, chat, socket }) => {
+const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, onForwardMessage, chat, socket, messageListRef }) => {
   const currentUserId = JSON.parse(localStorage.getItem('user') || '{}')?.userId;
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [messageToDelete, setMessageToDelete] = useState(null);
@@ -15,62 +14,114 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
   const [mediaLoadError, setMediaLoadError] = useState(null);
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, message: null });
   const [pinnedMessages, setPinnedMessages] = useState([]);
+  const [pinnedMessageCache, setPinnedMessageCache] = useState({});
   const [showPinnedList, setShowPinnedList] = useState(false);
   const [pinnedContextMenu, setPinnedContextMenu] = useState({ visible: false, message: null, messageIndex: null });
   const [showUnpinModal, setShowUnpinModal] = useState(false);
   const [messageToUnpin, setMessageToUnpin] = useState(null);
-  const messageListRef = useRef(null);
 
-  // Lấy danh sách tin nhắn ghim khi component mount hoặc chat thay đổi
+  const fetchPinnedMessages = async () => {
+    if (!chat || (!chat.isGroup && !chat.userId) || (chat.isGroup && !chat.targetUserId)) {
+      console.warn('Chat object is invalid or missing required properties:', chat);
+      setPinnedMessages([]);
+      return;
+    }
+
+    const otherUserId = chat.isGroup ? chat.targetUserId : chat.userId;
+    const cacheKey = `pinned:${otherUserId}`;
+
+    if (pinnedMessageCache[otherUserId]) {
+      setPinnedMessages(pinnedMessageCache[otherUserId]);
+      return;
+    }
+
+    const cachedPinned = localStorage.getItem(cacheKey);
+    if (cachedPinned) {
+      const parsedPinned = JSON.parse(cachedPinned);
+      setPinnedMessages(parsedPinned);
+      setPinnedMessageCache(prev => ({
+        ...prev,
+        [otherUserId]: parsedPinned,
+      }));
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/messages/pinned/${otherUserId}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+      const result = await response.json();
+      if (result.success) {
+        const sortedMessages = (result.messages || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        setPinnedMessages(sortedMessages);
+        setPinnedMessageCache(prev => ({
+          ...prev,
+          [otherUserId]: sortedMessages,
+        }));
+        localStorage.setItem(cacheKey, JSON.stringify(sortedMessages));
+      } else {
+        console.error('Không thể lấy tin nhắn ghim:', result.message);
+        setPinnedMessages([]);
+      }
+    } catch (error) {
+      console.error('Lỗi khi lấy tin nhắn ghim:', error);
+      setPinnedMessages([]);
+    }
+  };
+
+  const prefetchPinnedMessages = async () => {
+    const chatsToPrefetch = recentChats.slice(0, 5);
+    for (const recentChat of chatsToPrefetch) {
+      const otherUserId = recentChat.id;
+      const cacheKey = `pinned:${otherUserId}`;
+      if (!pinnedMessageCache[otherUserId] && !localStorage.getItem(cacheKey)) {
+        try {
+          const response = await fetch(`http://localhost:3000/api/messages/pinned/${otherUserId}`, {
+            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+          });
+          if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+          }
+          const result = await response.json();
+          if (result.success) {
+            const sortedMessages = (result.messages || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            setPinnedMessageCache(prev => ({
+              ...prev,
+              [otherUserId]: sortedMessages,
+            }));
+            localStorage.setItem(cacheKey, JSON.stringify(sortedMessages));
+          }
+        } catch (error) {
+          console.error(`Error prefetching pinned messages for ${otherUserId}:`, error);
+        }
+      }
+    }
+  };
+
   useEffect(() => {
-    const fetchPinnedMessages = async () => {
-      if (!chat || (!chat.isGroup && !chat.userId) || (chat.isGroup && !chat.targetUserId)) {
-        console.warn('Chat object is invalid or missing required properties:', chat);
-        setPinnedMessages([]);
-        return;
-      }
-
-      try {
-        const otherUserId = chat.isGroup ? chat.targetUserId : chat.userId;
-        const response = await fetch(`http://localhost:3000/api/messages/pinned/${otherUserId}`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! Status: ${response.status}`);
-        }
-
-        const result = await response.json();
-        if (result.success) {
-          const sortedMessages = (result.messages || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-          setPinnedMessages(sortedMessages);
-          console.log('Fetched pinned messages:', sortedMessages);
-        } else {
-          console.error('Không thể lấy tin nhắn ghim:', result.message);
-          setPinnedMessages([]);
-        }
-      } catch (error) {
-        console.error('Lỗi khi lấy tin nhắn ghim:', error);
-        setPinnedMessages([]);
-      }
-    };
-
     fetchPinnedMessages();
-  }, [chat]);
+    prefetchPinnedMessages();
+  }, [chat, recentChats]);
 
-  // Lắng nghe sự kiện ghim và bỏ ghim tin nhắn qua socket
   useEffect(() => {
     if (!chat || !socket) return;
 
-    // Sử dụng phòng đúng dựa trên loại chat
     const room = chat.isGroup ? `group:${chat.targetUserId}` : `conversation:${[currentUserId, chat.userId].sort().join(':')}`;
 
-    const handlePinnedMessageUpdate = (data) => {
+    const handlePinnedMessageUpdate = data => {
       console.log('Received messagePinned/messageUnpinned event:', data);
       if (data.messages) {
-        setPinnedMessages(data.messages);
+        const otherUserId = chat.isGroup ? chat.targetUserId : chat.userId;
+        const sortedMessages = data.messages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        setPinnedMessages(sortedMessages);
+        setPinnedMessageCache(prev => ({
+          ...prev,
+          [otherUserId]: sortedMessages,
+        }));
+        localStorage.setItem(`pinned:${otherUserId}`, JSON.stringify(sortedMessages));
       }
     };
 
@@ -83,14 +134,12 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
     };
   }, [chat, socket]);
 
-  // Cuộn xuống cuối danh sách tin nhắn khi messages thay đổi
   useEffect(() => {
     if (messageListRef.current) {
       messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
     }
   }, [messages]);
 
-  // Đóng context menu khi click ra ngoài
   useEffect(() => {
     const handleClickOutside = () => {
       setContextMenu({ visible: false, x: 0, y: 0, message: null });
@@ -100,7 +149,7 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
-  const handleDeleteClick = (messageId) => {
+  const handleDeleteClick = messageId => {
     if (chat.isGroup) {
       alert('Chức năng xóa tin nhắn nhóm hiện chưa được hỗ trợ.');
       return;
@@ -130,7 +179,7 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
     setFullscreenMedia(null);
   };
 
-  const handleMediaError = (messageId) => {
+  const handleMediaError = messageId => {
     setMediaLoadError(messageId);
   };
 
@@ -154,7 +203,7 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
     });
   };
 
-  const handleContextMenuAction = (action) => {
+  const handleContextMenuAction = action => {
     const { message } = contextMenu;
     if (!message) return;
 
@@ -188,7 +237,7 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
     setContextMenu({ visible: false, x: 0, y: 0, message: null });
   };
 
-  const handlePinnedContextMenuAction = (action) => {
+  const handlePinnedContextMenuAction = action => {
     const { message } = pinnedContextMenu;
     if (!message) return;
 
@@ -206,14 +255,12 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
     setPinnedContextMenu({ visible: false, message: null, messageIndex: null });
   };
 
-  const handlePinMessage = (messageId) => {
+  const handlePinMessage = messageId => {
     if (!chat || !socket) return;
 
     const room = chat.isGroup ? `group:${chat.targetUserId}` : `conversation:${[currentUserId, chat.userId].sort().join(':')}`;
-    
-    // Sử dụng tên sự kiện đúng dựa trên loại chat
     const eventName = chat.isGroup ? 'pinGroupMessage' : 'pinMessage';
-    socket.emit(eventName, { messageId, room, groupId: chat.isGroup ? chat.targetUserId : null }, (response) => {
+    socket.emit(eventName, { messageId, room, groupId: chat.isGroup ? chat.targetUserId : null }, response => {
       if (!response.success) {
         alert(`Không thể ghim tin nhắn: ${response.message}`);
       }
@@ -225,14 +272,8 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
 
     const messageId = messageToUnpin.id || messageToUnpin.messageId;
     const room = chat.isGroup ? `group:${chat.targetUserId}` : `conversation:${[currentUserId, chat.userId].sort().join(':')}`;
-    
-    // Sử dụng tên sự kiện đúng dựa trên loại chat
     const eventName = chat.isGroup ? 'unpinGroupMessage' : 'unpinMessage';
-    socket.emit(eventName, { 
-      messageId, 
-      room, 
-      groupId: chat.isGroup ? chat.targetUserId : null 
-    }, (response) => {
+    socket.emit(eventName, { messageId, room, groupId: chat.isGroup ? chat.targetUserId : null }, response => {
       if (response.success) {
         setShowUnpinModal(false);
         setMessageToUnpin(null);
@@ -259,7 +300,6 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
 
   messages.forEach((message, index) => {
     const isCurrentUser = message.senderId === currentUserId;
-    const nextMessage = messages[index + 1];
     const isSameSenderAsPrevious = lastSenderId === message.senderId;
     const isMediaMessage = (message.type === 'image' || message.type === 'video') && message.mediaUrl;
     const isImageMessage = message.type === 'image' && message.mediaUrl;
@@ -292,7 +332,6 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
 
   return (
     <div className="message-list" ref={messageListRef}>
-      {/* Hiển thị tin nhắn ghim ở trên cùng */}
       <div className="pinned-messages-container">
         {pinnedMessages.length > 0 ? (
           <>
@@ -304,14 +343,14 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                     <div className="pinned-message-label">Tin nhắn</div>
                     <div className="pinned-message-details">
                       <span className="pinned-message-sender">
-                          {(() => {
-                            const senderId = pinnedMessages[0].senderId || pinnedMessages[0].sender?.userId;
-                            if (senderId === currentUserId) {
-                              return JSON.parse(localStorage.getItem('user') || '{}')?.name || 'Bạn';
-                            }
-                            return pinnedMessages[0].sender?.name || chat?.name || 'Không xác định';
-                          })()}:
-                        </span>
+                        {(() => {
+                          const senderId = pinnedMessages[0].senderId || pinnedMessages[0].sender?.userId;
+                          if (senderId === currentUserId) {
+                            return JSON.parse(localStorage.getItem('user') || '{}')?.name || 'Bạn';
+                          }
+                          return pinnedMessages[0].sender?.name || chat?.name || 'Không xác định';
+                        })()}:
+                      </span>
                       <span className="pinned-message-content">
                         {pinnedMessages[0].type === 'text' ? pinnedMessages[0].content : `(${pinnedMessages[0].type})`}
                       </span>
@@ -330,13 +369,13 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                   <div className="pinned-message-options-wrapper">
                     <button
                       className="pinned-message-options"
-                      onClick={(e) => handlePinnedContextMenu(e, pinnedMessages[0], 0)}
+                      onClick={e => handlePinnedContextMenu(e, pinnedMessages[0], 0)}
                     >
                       <FaEllipsisH />
                     </button>
                     {pinnedContextMenu.visible && pinnedContextMenu.messageIndex === 0 && (
                       <div className="pinned-context-menu">
-                        {pinnedContextMenu.message?.type === 'text' && (
+                        {pinnedMessages[0].type === 'text' && (
                           <div className="context-menu-item" onClick={() => handlePinnedContextMenuAction('copy')}>
                             <FaCopy /> Sao chép
                           </div>
@@ -368,14 +407,14 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                         <div className="pinned-message-label">Tin nhắn</div>
                         <div className="pinned-message-details">
                           <span className="pinned-message-sender">
-                              {(() => {
-                                const senderId = msg.senderId || msg.sender?.userId;
-                                if (senderId === currentUserId) {
-                                  return JSON.parse(localStorage.getItem('user') || '{}')?.name || 'Bạn';
-                                }
-                                return msg.sender?.name || chat?.name || 'Không xác định';
-                              })()}:
-                            </span>
+                            {(() => {
+                              const senderId = msg.senderId || msg.sender?.userId;
+                              if (senderId === currentUserId) {
+                                return JSON.parse(localStorage.getItem('user') || '{}')?.name || 'Bạn';
+                              }
+                              return msg.sender?.name || chat?.name || 'Không xác định';
+                            })()}:
+                          </span>
                           <span className="pinned-message-content">
                             {msg.type === 'text' ? msg.content : `(${msg.type})`}
                           </span>
@@ -386,13 +425,13 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                       <div className="pinned-message-options-wrapper">
                         <button
                           className="pinned-message-options"
-                          onClick={(e) => handlePinnedContextMenu(e, msg, index + 1)}
+                          onClick={e => handlePinnedContextMenu(e, msg, index + 1)}
                         >
                           <FaEllipsisH />
                         </button>
                         {pinnedContextMenu.visible && pinnedContextMenu.messageIndex === index + 1 && (
                           <div className="pinned-context-menu">
-                            {pinnedContextMenu.message?.type === 'text' && (
+                            {msg.type === 'text' && (
                               <div className="context-menu-item" onClick={() => handlePinnedContextMenuAction('copy')}>
                                 <FaCopy /> Sao chép
                               </div>
@@ -416,7 +455,6 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
         )}
       </div>
 
-      {/* Danh sách tin nhắn thông thường */}
       {groupedMessages.map((group, groupIndex) => {
         const isGroupMessage = group.type === 'image-group';
         const groupMessages = isGroupMessage ? group.messages : [group];
@@ -498,7 +536,7 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                   ) : (
                     <div
                       className="message-content"
-                      onContextMenu={(e) => handleContextMenu(e, lastMessage)}
+                      onContextMenu={e => handleContextMenu(e, lastMessage)}
                     >
                       {chat?.isGroup && showAvatarAndName && !isGroupMessage && (
                         <span className="message-sender-name-inline">
@@ -511,7 +549,7 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                       {firstMessage.type === 'video' && firstMessage.mediaUrl ? (
                         <div
                           className="media-message-container"
-                          onContextMenu={(e) => handleContextMenu(e, lastMessage)}
+                          onContextMenu={e => handleContextMenu(e, lastMessage)}
                         >
                           <video
                             controls
@@ -532,7 +570,7 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                       {(firstMessage.type === 'file' || firstMessage.type === 'pdf' || firstMessage.type === 'zip') && firstMessage.mediaUrl ? (
                         <div
                           className="media-container"
-                          onContextMenu={(e) => handleContextMenu(e, lastMessage)}
+                          onContextMenu={e => handleContextMenu(e, lastMessage)}
                         >
                           <a href={firstMessage.mediaUrl} target="_blank" rel="noopener noreferrer" style={{ opacity: isPending ? 0.6 : 1 }}>
                             {firstMessage.fileName || 'File'}

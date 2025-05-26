@@ -5,9 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import '../../assets/styles/ChatPage.css';
 import { FaBellSlash, FaThumbtack, FaUsers } from 'react-icons/fa';
 import { initializeSocket, getSocket } from '../../utils/socket';
-import { RiPushpinFill } from "react-icons/ri";
+import { RiPushpinFill } from 'react-icons/ri';
 
-// Utility function for debouncing
 const debounce = (func, wait) => {
   let timeout;
   return (...args) => {
@@ -16,19 +15,15 @@ const debounce = (func, wait) => {
   };
 };
 
-// Hàm tính toán thời gian từ tin nhắn cuối cùng đến hiện tại
-const getTimeDifference = (timestamp) => {
+const getTimeDifference = timestamp => {
   if (!timestamp) return '';
-
   const now = new Date();
   const lastMessageTime = new Date(timestamp);
   const diffInSeconds = Math.floor((now - lastMessageTime) / 1000);
 
-  if (diffInSeconds < 10) {
-    return 'Vài giây';
-  } else if (diffInSeconds < 60) {
-    return `${diffInSeconds} giây`;
-  } else if (diffInSeconds < 3600) {
+  if (diffInSeconds < 10) return 'Vài giây';
+  else if (diffInSeconds < 60) return `${diffInSeconds} giây`;
+  else if (diffInSeconds < 3600) {
     const minutes = Math.floor(diffInSeconds / 60);
     return `${minutes} phút`;
   } else if (diffInSeconds < 86400) {
@@ -37,9 +32,8 @@ const getTimeDifference = (timestamp) => {
   } else if (diffInSeconds < 604800) {
     const days = Math.floor(diffInSeconds / 86400);
     return days === 1 ? 'Hôm qua' : `${days} ngày trước`;
-  } else if (diffInSeconds < 691200) {
-    return '7 ngày trước';
-  } else {
+  } else if (diffInSeconds < 691200) return '7 ngày trước';
+  else {
     return lastMessageTime.toLocaleDateString('vi-VN', {
       day: '2-digit',
       month: '2-digit',
@@ -83,7 +77,7 @@ const MessagesTab = ({
   const userName = currentUser?.name || 'Người dùng';
   const contextMenuRef = useRef(null);
 
-  const fetchChats = async () => {
+  const fetchChats = async (forceFetch = false) => {
     if (!currentUserId) {
       navigate('/login');
       return;
@@ -95,43 +89,53 @@ const MessagesTab = ({
       return;
     }
 
+    const cacheKey = `chats:${currentUserId}`;
+    if (!forceFetch) {
+      const cachedChats = localStorage.getItem(cacheKey);
+      if (cachedChats) {
+        const parsedChats = JSON.parse(cachedChats);
+        setChats(parsedChats);
+        setUnreadCounts(parsedChats.reduce((acc, chat) => ({
+          ...acc,
+          [chat.id]: chat.unreadCount || 0,
+        }), {}));
+        const initialTimeDiffs = parsedChats.reduce((acc, chat) => ({
+          ...acc,
+          [chat.id]: getTimeDifference(chat.timestamp),
+        }), {});
+        setTimeDifferences(initialTimeDiffs);
+        return;
+      }
+    }
+
     try {
       const response = await axios.get('http://localhost:3000/api/conversations/summary', {
         headers: { Authorization: `Bearer ${token.trim()}` },
       });
 
-      if (response.data && response.data.success) {
+      if (response.data?.success) {
         const { conversations = [], groups = [] } = response.data.data;
 
-        const formattedIndividualChats = conversations.map((conv) => {
-          console.log('Conversation:', conv);
-          return {
-            id: conv.otherUserId,
-            name: conv.displayName || 'Không có tên',
-            phoneNumber: conv.phoneNumber || '',
-            avatar: conv.avatar || 'https://placehold.co/50x50',
-            lastMessage:
-              conv.lastMessage?.status === 'recalled'
-                ? '(Tin nhắn đã thu hồi)'
-                : conv.lastMessage?.content || 'Chưa có tin nhắn',
-            lastMessageSender: conv.lastMessage?.senderId === currentUserId ? 'Bạn' : '',
-            timestamp: conv.lastMessage?.timestamp || new Date().toISOString(),
-            isMuted: conv.isMuted || false,
-            isPinned: conv.isPinned || false,
-            targetUserId: conv.otherUserId,
-            isGroup: false,
-            unreadCount: conv.unreadCount || 0,
-          };
-        });
+        const formattedIndividualChats = conversations.map(conv => ({
+          id: conv.otherUserId,
+          name: conv.displayName || 'Không có tên',
+          phoneNumber: conv.phoneNumber || '',
+          avatar: conv.avatar || 'https://placehold.co/50x50',
+          lastMessage: conv.lastMessage?.status === 'recalled' ? '(Tin nhắn đã thu hồi)' : conv.lastMessage?.content || 'Chưa có tin nhắn',
+          lastMessageSender: conv.lastMessage?.senderId === currentUserId ? 'Bạn' : '',
+          timestamp: conv.lastMessage?.timestamp || new Date().toISOString(),
+          isMuted: conv.isMuted || false,
+          isPinned: conv.isPinned || false,
+          targetUserId: conv.otherUserId,
+          isGroup: false,
+          unreadCount: conv.unreadCount || 0,
+        }));
 
-        const formattedGroupChats = groups.map((group) => ({
+        const formattedGroupChats = groups.map(group => ({
           id: group.groupId,
           name: group.name || 'Nhóm không tên',
           avatar: group.avatar || 'https://placehold.co/50x50',
-          lastMessage:
-            group.lastMessage?.isRecalled
-              ? '(Tin nhắn đã thu hồi)'
-              : group.lastMessage?.content || 'Chưa có tin nhắn',
+          lastMessage: group.lastMessage?.isRecalled ? '(Tin nhắn đã thu hồi)' : group.lastMessage?.content || 'Chưa có tin nhắn',
           lastMessageSender: group.lastMessage?.senderId === currentUserId ? 'Bạn' : group.lastMessage?.sender?.name || 'Thành viên nhóm',
           timestamp: group.lastMessage?.timestamp || group.createdAt || new Date().toISOString(),
           isMuted: false,
@@ -149,12 +153,11 @@ const MessagesTab = ({
         });
 
         setChats(combinedChats);
-        setUnreadCounts(
-          combinedChats.reduce((acc, chat) => ({
-            ...acc,
-            [chat.id]: chat.unreadCount || 0,
-          }), {})
-        );
+        localStorage.setItem(cacheKey, JSON.stringify(combinedChats));
+        setUnreadCounts(combinedChats.reduce((acc, chat) => ({
+          ...acc,
+          [chat.id]: chat.unreadCount || 0,
+        }), {}));
 
         const initialTimeDiffs = combinedChats.reduce((acc, chat) => ({
           ...acc,
@@ -176,203 +179,168 @@ const MessagesTab = ({
     fetchChats();
   }, [navigate, currentUserId]);
 
-  // Cập nhật thời gian mỗi phút
   useEffect(() => {
     const interval = setInterval(() => {
-      setTimeDifferences((prev) => {
+      setTimeDifferences(prev => {
         const updated = { ...prev };
-        chats.forEach((chat) => {
+        chats.forEach(chat => {
           updated[chat.id] = getTimeDifference(chat.timestamp);
         });
         return updated;
       });
     }, 60000);
-
     return () => clearInterval(interval);
   }, [chats]);
 
   useEffect(() => {
-  if (!currentUserId) return;
+    if (!currentUserId) return;
 
-  const token = localStorage.getItem('token');
-  let chatSocket, groupSocket;
+    const token = localStorage.getItem('token');
+    let chatSocket, groupSocket;
 
-  try {
-    chatSocket = initializeSocket(token, '/chat');
-    groupSocket = initializeSocket(token, '/group');
-  } catch (error) {
-    console.error('Socket initialization failed:', error);
-    navigate('/login');
-    return;
-  }
-
-  const processedMessages = new Set(); // Theo dõi messageId đã xử lý
-
-  const handleReceiveMessage = debounce((data) => {
-    console.log('handleReceiveMessage triggered', data);
-    const newMessage = data.message || data;
-    if (processedMessages.has(newMessage.messageId)) {
-      console.log('Message already processed:', newMessage.messageId);
+    try {
+      chatSocket = initializeSocket(token, '/chat');
+      groupSocket = initializeSocket(token, '/group');
+    } catch (error) {
+      console.error('Socket initialization failed:', error);
+      navigate('/login');
       return;
     }
-    processedMessages.add(newMessage.messageId);
 
-    const conversationId = newMessage.senderId === currentUserId ? newMessage.receiverId : newMessage.senderId;
+    const processedMessages = new Set();
 
-    setChats((prevChats) =>
-      prevChats.map((chat) =>
-        chat.id === conversationId
-          ? {
-              ...chat,
-              lastMessage: newMessage.status === 'recalled' ? '(Tin nhắn đã thu hồi)' : newMessage.content || 'Chưa có tin nhắn',
-              lastMessageSender: newMessage.senderId === currentUserId ? 'Bạn' : '', // Giữ nếu cần
-              timestamp: newMessage.timestamp || newMessage.createdAt || new Date().toISOString(),
-            }
-          : chat
-      ).sort((a, b) => {
-        if (a.isPinned && !b.isPinned) return -1;
-        if (!a.isPinned && b.isPinned) return 1;
-        return new Date(b.timestamp) - new Date(a.timestamp);
-      })
-    );
+    const handleReceiveMessage = debounce(data => {
+      const newMessage = data.message || data;
+      if (processedMessages.has(newMessage.messageId)) return;
+      processedMessages.add(newMessage.messageId);
 
-    setTimeDifferences((prev) => ({
-      ...prev,
-      [conversationId]: getTimeDifference(newMessage.timestamp || newMessage.createdAt || new Date().toISOString()),
-    }));
+      const conversationId = newMessage.senderId === currentUserId ? newMessage.receiverId : newMessage.senderId;
 
-    if (newMessage.senderId !== currentUserId && conversationId !== selectedChat?.id) {
-      console.log('Adding notification for:', { conversationId, messageId: newMessage.messageId });
-      setNewMessageHighlights((prev) => {
-        const newSet = new Set(prev);
-        newSet.add(conversationId);
-        return newSet;
-      });
-      setUnreadCounts((prev) => {
-        console.log('Updating unreadCounts:', { chatId: conversationId, newCount: (prev[conversationId] || 0) + 1 });
-        return {
-          ...prev,
-          [conversationId]: (prev[conversationId] || 0) + 1,
-        };
-      });
-    }
-  }, 100);
-
-  const handleNewGroupMessage = debounce((data) => {
-    console.log('handleNewGroupMessage triggered', data);
-    const { groupId, message } = data;
-    if (processedMessages.has(message.messageId)) {
-      console.log('Message already processed:', message.messageId);
-      return;
-    }
-    processedMessages.add(message.messageId);
-
-    if (message.senderId !== currentUserId) {
-      setChats((prevChats) =>
-        prevChats.map((chat) =>
-          chat.id === groupId
+      setChats(prevChats => {
+        const updatedChats = prevChats.map(chat =>
+          chat.id === conversationId
             ? {
                 ...chat,
-                lastMessage: message.status === 'recalled' ? '(Tin nhắn đã thu hồi)' : message.content || 'Chưa có tin nhắn',
-                lastMessageSender: message.senderId === currentUserId ? 'Bạn' : message.sender?.name || 'Thành viên nhóm', // Giữ nếu cần
-                timestamp: message.timestamp || message.createdAt || new Date().toISOString(),
+                lastMessage: newMessage.status === 'recalled' ? '(Tin nhắn đã thu hồi)' : newMessage.content || 'Chưa có tin nhắn',
+                lastMessageSender: newMessage.senderId === currentUserId ? 'Bạn' : '',
+                timestamp: newMessage.timestamp || newMessage.createdAt || new Date().toISOString(),
               }
             : chat
         ).sort((a, b) => {
           if (a.isPinned && !b.isPinned) return -1;
           if (!a.isPinned && b.isPinned) return 1;
           return new Date(b.timestamp) - new Date(a.timestamp);
-        })
-      );
+        });
+        localStorage.setItem(`chats:${currentUserId}`, JSON.stringify(updatedChats));
+        return updatedChats;
+      });
 
-      setTimeDifferences((prev) => ({
+      setTimeDifferences(prev => ({
         ...prev,
-        [groupId]: getTimeDifference(message.timestamp || message.createdAt || new Date().toISOString()),
+        [conversationId]: getTimeDifference(newMessage.timestamp || newMessage.createdAt || new Date().toISOString()),
       }));
 
-      if (groupId !== selectedChat?.id) {
-        console.log('Adding group notification for:', { groupId, messageId: message.messageId });
-        setNewMessageHighlights((prev) => {
-          const newSet = new Set(prev);
-          newSet.add(groupId);
-          return newSet;
+      if (newMessage.senderId !== currentUserId && conversationId !== selectedChat?.id) {
+        setNewMessageHighlights(prev => new Set(prev).add(conversationId));
+        setUnreadCounts(prev => ({
+          ...prev,
+          [conversationId]: (prev[conversationId] || 0) + 1,
+        }));
+      }
+    }, 100);
+
+    const handleNewGroupMessage = debounce(data => {
+      const { groupId, message } = data;
+      if (processedMessages.has(message.messageId)) return;
+      processedMessages.add(message.messageId);
+
+      if (message.senderId !== currentUserId) {
+        setChats(prevChats => {
+          const updatedChats = prevChats.map(chat =>
+            chat.id === groupId
+              ? {
+                  ...chat,
+                  lastMessage: message.status === 'recalled' ? '(Tin nhắn đã thu hồi)' : message.content || 'Chưa có tin nhắn',
+                  lastMessageSender: message.senderId === currentUserId ? 'Bạn' : message.sender?.name || 'Thành viên nhóm',
+                  timestamp: message.timestamp || message.createdAt || new Date().toISOString(),
+                }
+              : chat
+          ).sort((a, b) => {
+            if (a.isPinned && !b.isPinned) return -1;
+            if (!a.isPinned && b.isPinned) return 1;
+            return new Date(b.timestamp) - new Date(a.timestamp);
+          });
+          localStorage.setItem(`chats:${currentUserId}`, JSON.stringify(updatedChats));
+          return updatedChats;
         });
-        setUnreadCounts((prev) => {
-          console.log('Updating unreadCounts:', { chatId: groupId, newCount: (prev[groupId] || 0) + 1 });
-          return {
+
+        setTimeDifferences(prev => ({
+          ...prev,
+          [groupId]: getTimeDifference(message.timestamp || message.createdAt || new Date().toISOString()),
+        }));
+
+        if (groupId !== selectedChat?.id) {
+          setNewMessageHighlights(prev => new Set(prev).add(groupId));
+          setUnreadCounts(prev => ({
             ...prev,
             [groupId]: (prev[groupId] || 0) + 1,
-          };
+          }));
+        }
+      }
+    }, 100);
+
+    const handleUpdateChatList = debounce(data => {
+      const { conversationId, message } = data;
+      if (processedMessages.has(message.messageId)) return;
+      processedMessages.add(message.messageId);
+
+      const senderId = message.senderId === currentUserId ? message.receiverId : message.senderId;
+      const chatId = message.groupId || senderId;
+
+      setChats(prevChats => {
+        const chatIndex = prevChats.findIndex(chat => chat.id === chatId);
+        if (chatIndex === -1) return prevChats;
+
+        const updatedChats = [...prevChats];
+        updatedChats[chatIndex] = {
+          ...updatedChats[chatIndex],
+          lastMessage: message.status === 'recalled' ? '(Tin nhắn đã thu hồi)' : message.content || 'Chưa có tin nhắn',
+          lastMessageSender: message.senderId === currentUserId ? 'Bạn' : updatedChats[chatIndex].name,
+          timestamp: message.timestamp || message.createdAt || new Date().toISOString(),
+        };
+
+        localStorage.setItem(`chats:${currentUserId}`, JSON.stringify(updatedChats));
+        return updatedChats.sort((a, b) => {
+          if (a.isPinned && !b.isPinned) return -1;
+          if (!a.isPinned && b.isPinned) return 1;
+          return new Date(b.timestamp) - new Date(a.timestamp);
         });
-      }
-    }
-  }, 100);
-
-  const handleUpdateChatList = debounce((data) => {
-    console.log('handleUpdateChatList triggered', data);
-    const { conversationId, message } = data;
-    if (processedMessages.has(message.messageId)) {
-      console.log('Message already processed:', message.messageId);
-      return;
-    }
-    processedMessages.add(message.messageId);
-
-    const senderId = message.senderId === currentUserId ? message.receiverId : message.senderId;
-    const chatId = message.groupId || senderId;
-
-    setChats((prevChats) => {
-      const chatIndex = prevChats.findIndex((chat) => chat.id === chatId);
-      if (chatIndex === -1) {
-        return prevChats;
-      }
-
-      const updatedChats = [...prevChats];
-      updatedChats[chatIndex] = {
-        ...updatedChats[chatIndex],
-        lastMessage: message.status === 'recalled' ? '(Tin nhắn đã thu hồi)' : message.content || 'Chưa có tin nhắn',
-        lastMessageSender: message.senderId === currentUserId ? 'Bạn' : updatedChats[chatIndex].name, // Giữ nếu cần
-        timestamp: message.timestamp || message.createdAt || new Date().toISOString(),
-      };
-
-      return updatedChats.sort((a, b) => {
-        if (a.isPinned && !b.isPinned) return -1;
-        if (!a.isPinned && b.isPinned) return 1;
-        return new Date(b.timestamp) - new Date(a.timestamp);
       });
-    });
 
-    setTimeDifferences((prev) => ({
-      ...prev,
-      [chatId]: getTimeDifference(message.timestamp || message.createdAt || new Date().toISOString()),
-    }));
+      setTimeDifferences(prev => ({
+        ...prev,
+        [chatId]: getTimeDifference(message.timestamp || message.createdAt || new Date().toISOString()),
+      }));
 
-    if (message.senderId !== currentUserId && chatId !== selectedChat?.id) {
-      console.log('Adding updateChatList notification for:', { chatId, messageId: message.messageId });
-      setNewMessageHighlights((prev) => {
-        const newSet = new Set(prev);
-        newSet.add(chatId);
-        return newSet;
-      });
-      setUnreadCounts((prev) => {
-        console.log('Updating unreadCounts:', { chatId, newCount: (prev[chatId] || 0) + 1 });
-        return {
+      if (message.senderId !== currentUserId && chatId !== selectedChat?.id) {
+        setNewMessageHighlights(prev => new Set(prev).add(chatId));
+        setUnreadCounts(prev => ({
           ...prev,
           [chatId]: (prev[chatId] || 0) + 1,
-        };
-      });
-    }
-  }, 100);
+        }));
+      }
+    }, 100);
 
-  chatSocket.on('receiveMessage', handleReceiveMessage);
-  groupSocket.on('newGroupMessage', handleNewGroupMessage);
-  chatSocket.on('updateChatList', handleUpdateChatList);
+    chatSocket.on('receiveMessage', handleReceiveMessage);
+    groupSocket.on('newGroupMessage', handleNewGroupMessage);
+    chatSocket.on('updateChatList', handleUpdateChatList);
 
-  return () => {
-    chatSocket.off('receiveMessage', handleReceiveMessage);
-    groupSocket.off('newGroupMessage', handleNewGroupMessage);
-    chatSocket.off('updateChatList', handleUpdateChatList);
-  };
-}, [currentUserId, navigate, selectedChat]);
+    return () => {
+      chatSocket.off('receiveMessage', handleReceiveMessage);
+      groupSocket.off('newGroupMessage', handleNewGroupMessage);
+      chatSocket.off('updateChatList', handleUpdateChatList);
+    };
+  }, [currentUserId, navigate, selectedChat]);
 
   useEffect(() => {
     if (foundUser && friendStatus === 'stranger') {
@@ -409,7 +377,7 @@ const MessagesTab = ({
         { headers: { Authorization: `Bearer ${token.trim()}` } }
       );
 
-      if (response.data && response.data.success && response.data.data && response.data.data.length > 0) {
+      if (response.data?.success && response.data.data?.length > 0) {
         const formattedUser = {
           ...response.data.data[0],
           avatar: response.data.data[0].avatar || 'https://placehold.co/50x50',
@@ -425,19 +393,13 @@ const MessagesTab = ({
             { headers: { Authorization: `Bearer ${token.trim()}` } }
           );
 
-          if (statusResponse.data && statusResponse.data.status) {
-            setFriendStatus(statusResponse.data.status);
-          } else {
-            setFriendStatus('stranger');
-          }
+          setFriendStatus(statusResponse.data?.status || 'stranger');
         } catch (statusError) {
           console.error('Lỗi khi lấy trạng thái bạn bè:', statusError);
           if (statusError.response?.status === 404) {
             setFriendStatus('stranger');
           } else {
-            alert(
-              'Không thể kiểm tra trạng thái bạn bè do lỗi hệ thống. Giả định đây là người lạ để bạn có thể gửi lời mời kết bạn.'
-            );
+            alert('Không thể kiểm tra trạng thái bạn bè do lỗi hệ thống.');
             setFriendStatus('stranger');
           }
         }
@@ -456,7 +418,7 @@ const MessagesTab = ({
     }
   };
 
-  const handleSelectUser = async (user) => {
+  const handleSelectUser = async user => {
     const chat = {
       id: user.userId,
       name: user.name,
@@ -466,10 +428,10 @@ const MessagesTab = ({
       targetUserId: user.userId,
     };
 
-    setRecentSearches((prev) => {
+    setRecentSearches(prev => {
       const updated = [
         { userId: user.userId, name: user.name, phoneNumber: user.phoneNumber, avatar: user.avatar },
-        ...prev.filter((s) => s.userId !== user.userId),
+        ...prev.filter(s => s.userId !== user.userId),
       ].slice(0, 5);
       localStorage.setItem('recentSearches', JSON.stringify(updated));
       return updated;
@@ -479,7 +441,7 @@ const MessagesTab = ({
     handleCloseModal();
   };
 
-  const handleAddFriendRequest = async (user) => {
+  const handleAddFriendRequest = async user => {
     if (!friendRequestMessage || friendRequestMessage.trim() === '') {
       alert('Vui lòng nhập lời nhắn để gửi kèm lời mời kết bạn!');
       return;
@@ -493,7 +455,7 @@ const MessagesTab = ({
         { headers: { Authorization: `Bearer ${token.trim()}` } }
       );
 
-      if (response.data && response.data.success) {
+      if (response.data?.success) {
         alert('Đã gửi yêu cầu kết bạn thành công!');
         setFriendStatus('pending_sent');
         setFriendRequestMessage('');
@@ -515,86 +477,70 @@ const MessagesTab = ({
   };
 
   const handleMarkAsRead = async (chatId, isGroup) => {
-  try {
-    const token = localStorage.getItem('token');
-    const socket = getSocket('/chat');
+    try {
+      const token = localStorage.getItem('token');
+      const endpoint = isGroup
+        ? `http://localhost:3000/api/groups/messages/${chatId}`
+        : `http://localhost:3000/api/messages/user/${chatId}`;
 
-    // Fetch unread messages for the chat
-    const endpoint = isGroup
-      ? `http://localhost:3000/api/groups/messages/${chatId}`
-      : `http://localhost:3000/api/messages/user/${chatId}`;
+      const response = await axios.get(endpoint, {
+        headers: { Authorization: `Bearer ${token.trim()}` },
+      });
 
-    const response = await axios.get(endpoint, {
-      headers: { Authorization: `Bearer ${token.trim()}` },
-    });
+      if (response.data.success) {
+        const messages = response.data.messages || [];
+        const unreadMessages = messages.filter(msg => ['sent', 'delivered'].includes(msg.status));
 
-    if (response.data.success) {
-      const messages = response.data.messages || [];
-      // Filter for unread messages (status is 'sent' or 'delivered')
-      const unreadMessages = messages.filter(
-        (msg) => ['sent', 'delivered'].includes(msg.status)
-      );
+        for (const message of unreadMessages) {
+          const markAsSeenEndpoint = isGroup
+            ? `http://localhost:3000/api/groups/messages/seen/${message.messageId}`
+            : `http://localhost:3000/api/messages/seen/${message.messageId}`;
 
-      // Mark each unread message as seen
-      for (const message of unreadMessages) {
-        const markAsSeenEndpoint = isGroup
-          ? `http://localhost:3000/api/groups/messages/seen/${message.messageId}`
-          : `http://localhost:3000/api/messages/seen/${message.messageId}`;
-
-        try {
-          await axios.patch(
-            markAsSeenEndpoint,
-            {},
-            { headers: { Authorization: `Bearer ${token.trim()}` } }
-          );
-          console.log(`Message ${message.messageId} marked as seen for chat ${chatId}`);
-        } catch (patchError) {
-          console.error(`Failed to mark message ${message.messageId} as seen:`, patchError);
+          try {
+            await axios.patch(markAsSeenEndpoint, {}, {
+              headers: { Authorization: `Bearer ${token.trim()}` },
+            });
+          } catch (patchError) {
+            console.error(`Failed to mark message ${message.messageId} as seen:`, patchError);
+          }
         }
+
+        setUnreadCounts(prev => ({
+          ...prev,
+          [chatId]: 0,
+        }));
       }
-
-      // Reset unread count for this chat
-      setUnreadCounts((prev) => ({
-        ...prev,
-        [chatId]: 0,
-      }));
-
-      console.log(`All unread messages marked as seen for chat ${chatId}`);
+    } catch (error) {
+      console.error('Lỗi khi đánh dấu tin nhắn là đã xem:', error);
+      if (error.response?.status === 404) {
+        await fetchChats(true);
+      } else if (error.response?.status === 500) {
+        alert('Không thể đánh dấu tin nhắn là đã xem do lỗi server.');
+      }
     }
-  } catch (error) {
-    console.error('Lỗi khi đánh dấu tin nhắn là đã xem:', error);
-    if (error.response?.status === 404) {
-      console.warn(`Không tìm thấy ${isGroup ? 'nhóm' : 'người dùng'} ${chatId}, làm mới danh sách chats.`);
-      await fetchChats(); // Làm mới danh sách chats
-    } else if (error.response?.status === 500) {
-      console.warn(`Lỗi server khi đánh dấu tin nhắn là đã xem cho chat ${chatId}`);
-      alert('Không thể đánh dấu tin nhắn là đã xem do lỗi server. Vui lòng thử lại sau.');
-    }
-  }
-};
+  };
 
-const handleSelectChat = (chat) => {
-    setNewMessageHighlights((prev) => {
+  const handleSelectChat = chat => {
+    setNewMessageHighlights(prev => {
       const newSet = new Set(prev);
       newSet.delete(chat.id);
       return newSet;
     });
-    setUnreadCounts((prev) => ({
+    setUnreadCounts(prev => ({
       ...prev,
       [chat.id]: 0,
     }));
 
     onSelectChat(chat);
-    handleMarkAsRead(chat.id, chat.isGroup); // Truyền isGroup từ chat
+    handleMarkAsRead(chat.id, chat.isGroup);
   };
 
   const getPinnedChatsCount = () => {
-    return chats.filter((chat) => chat.isPinned).length;
+    return chats.filter(chat => chat.isPinned).length;
   };
 
-  const handlePinConversation = async (chat) => {
+  const handlePinConversation = async chat => {
     if (chat.isPinned) {
-      console.log('Conversation is already pinned:', chat.id);
       return;
     }
 
@@ -613,15 +559,17 @@ const handleSelectChat = (chat) => {
       );
 
       if (response.data.success) {
-        setChats((prevChats) =>
-          prevChats.map((c) =>
+        setChats(prevChats => {
+          const updatedChats = prevChats.map(c =>
             c.id === chat.id ? { ...c, isPinned: true } : c
           ).sort((a, b) => {
             if (a.isPinned && !b.isPinned) return -1;
             if (!a.isPinned && b.isPinned) return 1;
             return new Date(b.timestamp) - new Date(a.timestamp);
-          })
-        );
+          });
+          localStorage.setItem(`chats:${currentUserId}`, JSON.stringify(updatedChats));
+          return updatedChats;
+        });
         setContextMenu(null);
       }
     } catch (error) {
@@ -634,9 +582,8 @@ const handleSelectChat = (chat) => {
     }
   };
 
-  const handleUnpinConversation = async (chat) => {
+  const handleUnpinConversation = async chat => {
     if (!chat.isPinned) {
-      console.log('Conversation is not pinned:', chat.id);
       return;
     }
 
@@ -649,15 +596,17 @@ const handleSelectChat = (chat) => {
       );
 
       if (response.data.success) {
-        setChats((prevChats) =>
-          prevChats.map((c) =>
+        setChats(prevChats => {
+          const updatedChats = prevChats.map(c =>
             c.id === chat.id ? { ...c, isPinned: false } : c
           ).sort((a, b) => {
             if (a.isPinned && !b.isPinned) return -1;
             if (!a.isPinned && b.isPinned) return 1;
             return new Date(b.timestamp) - new Date(a.timestamp);
-          })
-        );
+          });
+          localStorage.setItem(`chats:${currentUserId}`, JSON.stringify(updatedChats));
+          return updatedChats;
+        });
         setContextMenu(null);
       }
     } catch (error) {
@@ -681,7 +630,7 @@ const handleSelectChat = (chat) => {
   };
 
   useEffect(() => {
-    const handleClickOutside = (event) => {
+    const handleClickOutside = event => {
       if (contextMenuRef.current && !contextMenuRef.current.contains(event.target)) {
         setContextMenu(null);
       }
@@ -704,7 +653,7 @@ const handleSelectChat = (chat) => {
       ) : (
         <>
           {chats.length > 0 ? (
-            chats.map((chat) => (
+            chats.map(chat => (
               <div
                 key={chat.id}
                 className={`chat-item ${chat.isPinned ? 'pinned' : ''} ${
@@ -713,13 +662,13 @@ const handleSelectChat = (chat) => {
                   selectedChat?.id === chat.id ? 'selected-chat' : ''
                 }`}
                 onClick={() => handleSelectChat(chat)}
-                onContextMenu={(e) => handleContextMenu(e, chat)}
+                onContextMenu={e => handleContextMenu(e, chat)}
               >
                 <img
                   src={chat.avatar}
                   alt="Avatar"
                   className="chat-avatar"
-                  onError={(e) => {
+                  onError={e => {
                     console.log('Error loading avatar for chat:', chat.id, chat.avatar);
                     e.target.src = 'https://placehold.co/50x50';
                   }}
@@ -806,7 +755,7 @@ const handleSelectChat = (chat) => {
                       type="text"
                       placeholder="Nhập số điện thoại để tìm kiếm"
                       value={friendSearchQuery}
-                      onChange={(e) => setFriendSearchQuery(e.target.value)}
+                      onChange={e => setFriendSearchQuery(e.target.value)}
                     />
                   </div>
                   <div className="modal-actions">
@@ -840,7 +789,7 @@ const handleSelectChat = (chat) => {
                       <textarea
                         placeholder="Nhập lời nhắn gửi kèm lời mời kết bạn..."
                         value={friendRequestMessage}
-                        onChange={(e) => setFriendRequestMessage(e.target.value)}
+                        onChange={e => setFriendRequestMessage(e.target.value)}
                         rows={3}
                         maxLength={150}
                       />

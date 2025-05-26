@@ -15,14 +15,115 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
   const [messageCache, setMessageCache] = useState({});
   const [recentMessages, setRecentMessages] = useState([]);
   const [friendStatus, setFriendStatus] = useState(null);
-  const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
+  const [isCreateGroupModalOpen, setIsModalOpen] = useState(false);
+  const [lastEvaluatedKey, setLastEvaluatedKey] = useState(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const navigate = useNavigate();
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const currentUserId = currentUser?.userId;
   const token = localStorage.getItem('token');
   const chatSocketRef = useRef(null);
   const groupSocketRef = useRef(null);
-  const [pinnedMessages, setPinnedMessages] = useState([]);
+  const messageListRef = useRef(null);
+
+  const clearOldCache = () => {
+    const maxCacheItems = 10;
+    const keys = Object.keys(localStorage).filter(k => k.startsWith('messages_'));
+    if (keys.length > maxCacheItems) {
+      keys.slice(0, keys.length - maxCacheItems).forEach(k => localStorage.removeItem(k));
+    }
+  };
+
+  const prefetchMessages = async () => {
+    const chatsToPrefetch = recentMessages.slice(0, 5);
+    for (const recentChat of chatsToPrefetch) {
+      const targetUserId = recentChat.id;
+      const cacheKey = `messages:${targetUserId}`;
+      if (!messageCache[targetUserId] && !localStorage.getItem(cacheKey)) {
+        try {
+          const endpoint = recentChat.isGroup
+            ? `http://localhost:3000/api/groups/messages/${targetUserId}?limit=20`
+            : `http://localhost:3000/api/messages/user/${targetUserId}?limit=20`;
+          const response = await axios.get(endpoint, {
+            headers: { Authorization: `Bearer ${token.trim()}` },
+          });
+          if (response.data.success) {
+            const fetchedMessages = response.data.data?.messages || response.data.messages || [];
+            setMessageCache(prev => ({
+              ...prev,
+              [targetUserId]: fetchedMessages,
+            }));
+            localStorage.setItem(cacheKey, JSON.stringify(fetchedMessages));
+          }
+        } catch (error) {
+          console.error(`Error prefetching messages for ${targetUserId}:`, error);
+        }
+      }
+    }
+  };
+
+  const fetchMessages = async (forceFetch = false, append = false) => {
+    if (!chat?.targetUserId) return;
+    const cacheKey = `messages:${chat.targetUserId}`;
+    const shouldForceFetch = forceFetch || newMessageHighlights.has(chat.targetUserId) || (unreadCounts[chat.targetUserId] > 0);
+
+    if (!append && !shouldForceFetch && messageCache[chat.targetUserId]) {
+      setMessages(messageCache[chat.targetUserId]);
+      return;
+    }
+
+    const cachedMessages = localStorage.getItem(cacheKey);
+    if (!append && !shouldForceFetch && cachedMessages) {
+      const parsedMessages = JSON.parse(cachedMessages);
+      setMessages(parsedMessages);
+      setMessageCache(prev => ({
+        ...prev,
+        [chat.targetUserId]: parsedMessages,
+      }));
+      return;
+    }
+
+    try {
+      setIsLoadingMore(append);
+      const endpoint = chat.isGroup
+        ? `http://localhost:3000/api/groups/messages/${chat.targetUserId}?limit=20${lastEvaluatedKey ? `&lastEvaluatedKey=${encodeURIComponent(JSON.stringify(lastEvaluatedKey))}` : ''}`
+        : `http://localhost:3000/api/messages/user/${chat.targetUserId}?limit=20${lastEvaluatedKey ? `&lastEvaluatedKey=${encodeURIComponent(JSON.stringify(lastEvaluatedKey))}` : ''}`;
+      const response = await axios.get(endpoint, {
+        headers: { Authorization: `Bearer ${token.trim()}` },
+      });
+      if (response.data.success) {
+        const fetchedMessages = chat.isGroup ? response.data.data?.messages || [] : response.data.messages || [];
+        const newMessages = append
+          ? [...(messageCache[chat.targetUserId] || []), ...fetchedMessages]
+          : fetchedMessages;
+        setMessages(newMessages);
+        setMessageCache(prev => ({
+          ...prev,
+          [chat.targetUserId]: newMessages,
+        }));
+        localStorage.setItem(cacheKey, JSON.stringify(newMessages));
+        setLastEvaluatedKey(response.data.lastEvaluatedKey);
+      } else {
+        setMessages([]);
+      }
+    } catch (error) {
+      console.error('Error fetching messages:', error);
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        navigate('/login');
+      }
+      setMessages([]);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
+  const handleScroll = () => {
+    if (messageListRef.current?.scrollTop === 0 && lastEvaluatedKey && !isLoadingMore) {
+      fetchMessages(false, true);
+    }
+  };
 
   useEffect(() => {
     if (!currentUserId || !token || !chat?.targetUserId) {
@@ -30,43 +131,9 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
       return;
     }
 
-    const fetchMessages = async (forceFetch = false) => {
-      const shouldForceFetch = forceFetch || newMessageHighlights.has(chat.targetUserId) || (unreadCounts[chat.targetUserId] > 0);
-
-      if (!shouldForceFetch && messageCache[chat.targetUserId]) {
-        setMessages(messageCache[chat.targetUserId]);
-        return;
-      }
-
-      try {
-        const endpoint = chat.isGroup
-          ? `http://localhost:3000/api/groups/messages/${chat.targetUserId}`
-          : `http://localhost:3000/api/messages/user/${chat.targetUserId}`;
-
-        const response = await axios.get(endpoint, {
-          headers: { Authorization: `Bearer ${token.trim()}` },
-        });
-
-        if (response.data.success) {
-          const fetchedMessages = chat.isGroup ? response.data.data.messages || [] : response.data.messages || [];
-          setMessages(fetchedMessages);
-          setMessageCache((prev) => ({
-            ...prev,
-            [chat.targetUserId]: fetchedMessages,
-          }));
-        } else {
-          setMessages([]);
-        }
-      } catch (error) {
-        console.error('Error fetching messages:', error);
-        if (error.response?.status === 401) {
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          navigate('/login');
-        }
-        setMessages([]);
-      }
-    };
+    clearOldCache();
+    prefetchMessages();
+    fetchMessages();
 
     const fetchRecentChats = async () => {
       try {
@@ -75,9 +142,10 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
         });
         if (response.data.success) {
           const conversations = response.data.data?.conversations || [];
-          const formattedChats = conversations.map((conv) => ({
+          const formattedChats = conversations.map(conv => ({
             id: conv.otherUserId,
             name: conv.displayName || 'Không có tên',
+            isGroup: false,
           }));
           setRecentMessages(formattedChats);
         }
@@ -88,46 +156,42 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
 
     const fetchFriendStatus = async () => {
       if (chat.isGroup) return;
-
       try {
         const response = await axios.get(
           `http://localhost:3000/api/friends/status/${chat.targetUserId}`,
           { headers: { Authorization: `Bearer ${token.trim()}` } }
         );
-
-        if (response.data && response.data.status) {
+        if (response.data?.status) {
           setFriendStatus(response.data.status);
         } else {
           setFriendStatus('stranger');
         }
       } catch (error) {
         console.error('Error fetching friend status:', error);
-        alert(
-          'Không thể kiểm tra trạng thái bạn bè do lỗi hệ thống. Giả định đây là người lạ để bạn có thể gửi lời mời kết bạn.'
-        );
         setFriendStatus('stranger');
       }
     };
 
     const markMessagesAsSeen = async () => {
       try {
-        const response = await axios.get(
-          `http://localhost:3000/api/messages/user/${chat.targetUserId}`,
-          { headers: { Authorization: `Bearer ${token.trim()}` } }
-        );
-
+        const endpoint = chat.isGroup
+          ? `http://localhost:3000/api/groups/messages/${chat.targetUserId}`
+          : `http://localhost:3000/api/messages/user/${chat.targetUserId}`;
+        const response = await axios.get(endpoint, {
+          headers: { Authorization: `Bearer ${token.trim()}` },
+        });
         if (response.data.success) {
           const unreadMessages = response.data.messages.filter(
-            (msg) => msg.status === 'SENT' || msg.status === 'DELIVERED'
+            msg => msg.status === 'sent' || msg.status === 'delivered'
           );
           for (const msg of unreadMessages) {
-            await axios.patch(
-              `http://localhost:3000/api/messages/seen/${msg.messageId}`,
-              {},
-              { headers: { Authorization: `Bearer ${token.trim()}` } }
-            );
+            const markEndpoint = chat.isGroup
+              ? `http://localhost:3000/api/groups/messages/seen/${msg.messageId}`
+              : `http://localhost:3000/api/messages/seen/${msg.messageId}`;
+            await axios.patch(markEndpoint, {}, {
+              headers: { Authorization: `Bearer ${token.trim()}` },
+            });
           }
-          console.log(`Messages marked as seen for chat ${chat.targetUserId}`);
         }
       } catch (error) {
         console.error('Error marking messages as seen:', error);
@@ -137,11 +201,10 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
     if (!chatSocketRef.current) {
       try {
         chatSocketRef.current = getSocket('/chat');
-        console.log('Chat Socket initialized:', chatSocketRef.current.id);
         chatSocketRef.current.on('connect', () => {
           console.log('Chat Socket connected:', chatSocketRef.current.id);
         });
-        chatSocketRef.current.on('connect_error', (error) => {
+        chatSocketRef.current.on('connect_error', error => {
           console.error('Chat Socket connection error:', error);
         });
       } catch (error) {
@@ -154,11 +217,10 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
     if (chat.isGroup && !groupSocketRef.current) {
       try {
         groupSocketRef.current = getSocket('/group');
-        console.log('Group Socket initialized:', groupSocketRef.current.id);
         groupSocketRef.current.on('connect', () => {
           console.log('Group Socket connected:', groupSocketRef.current.id);
         });
-        groupSocketRef.current.on('connect_error', (error) => {
+        groupSocketRef.current.on('connect_error', error => {
           console.error('Group Socket connection error:', error);
         });
       } catch (error) {
@@ -176,20 +238,20 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
         chatSocketRef.current.emit('joinRoom', { room: `user:${chat.targetUserId}` });
         const conversationRoom = `conversation:${[currentUserId, chat.targetUserId].sort().join(':')}`;
         chatSocketRef.current.emit('joinRoom', { room: conversationRoom });
-        console.log('Joined conversation room:', conversationRoom);
       }
     }
 
-    const handleReceiveMessage = (newMessage) => {
-      console.log('Received message:', newMessage);
+    const handleReceiveMessage = newMessage => {
       if (
-        (newMessage.senderId === chat.targetUserId || newMessage.receiverId === chat.targetUserId || newMessage.groupId === chat.targetUserId) &&
+        (newMessage.senderId === chat.targetUserId ||
+          newMessage.receiverId === chat.targetUserId ||
+          newMessage.groupId === chat.targetUserId) &&
         newMessage.senderId !== currentUserId
       ) {
-        setMessages((prev) => {
+        setMessages(prev => {
           if (!Array.isArray(prev)) return [newMessage];
           const existingMessageIndex = prev.findIndex(
-            (msg) => msg.tempId === newMessage.messageId || msg.messageId === newMessage.messageId
+            msg => msg.tempId === newMessage.messageId || msg.messageId === newMessage.messageId
           );
           if (existingMessageIndex !== -1) {
             return prev.map((msg, index) =>
@@ -197,119 +259,76 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
             );
           }
           const updatedMessages = [...prev, { ...newMessage, status: 'sent' }];
-          setMessageCache((prevCache) => ({
+          setMessageCache(prevCache => ({
             ...prevCache,
             [chat.targetUserId]: updatedMessages,
           }));
+          localStorage.setItem(`messages:${chat.targetUserId}`, JSON.stringify(updatedMessages));
           return updatedMessages;
         });
       }
     };
 
     const handleMessageStatus = ({ messageId, status }) => {
-      setMessages((prev) => {
+      setMessages(prev => {
         if (!Array.isArray(prev)) return prev;
-        const updatedMessages = prev.map((msg) =>
+        const updatedMessages = prev.map(msg =>
           (msg.id === messageId || msg.messageId === messageId || msg.tempId === messageId)
             ? { ...msg, status }
             : msg
         );
-        setMessageCache((prevCache) => ({
+        setMessageCache(prevCache => ({
           ...prevCache,
           [chat.targetUserId]: updatedMessages,
         }));
+        localStorage.setItem(`messages:${chat.targetUserId}`, JSON.stringify(updatedMessages));
         return updatedMessages;
       });
     };
 
     const handleMessageRecalled = ({ messageId }) => {
-      setMessages((prev) => {
+      setMessages(prev => {
         if (!Array.isArray(prev)) return prev;
-        const updatedMessages = prev.map((msg) =>
+        const updatedMessages = prev.map(msg =>
           (msg.id === messageId || msg.messageId === messageId || msg.tempId === messageId)
             ? { ...msg, status: 'recalled' }
             : msg
         );
-        setMessageCache((prevCache) => ({
+        setMessageCache(prevCache => ({
           ...prevCache,
           [chat.targetUserId]: updatedMessages,
         }));
+        localStorage.setItem(`messages:${chat.targetUserId}`, JSON.stringify(updatedMessages));
         return updatedMessages;
       });
     };
 
     const handleMessageDeleted = ({ messageId }) => {
-      setMessages((prev) => {
+      setMessages(prev => {
         if (!Array.isArray(prev)) return prev;
         const updatedMessages = prev.filter(
-          (msg) => msg.id !== messageId && msg.messageId !== messageId && msg.tempId !== messageId
+          msg => msg.id !== messageId && msg.messageId !== messageId && msg.tempId !== messageId
         );
-        setMessageCache((prevCache) => ({
+        setMessageCache(prevCache => ({
           ...prevCache,
           [chat.targetUserId]: updatedMessages,
         }));
+        localStorage.setItem(`messages:${chat.targetUserId}`, JSON.stringify(updatedMessages));
         return updatedMessages;
       });
     };
-
-    const handleMessagePinned = (data) => {
-  console.log('Received messagePinned event in ChatWindow:', data);
-  if (data.messages) {
-    // Server trả về danh sách tin nhắn ghim mới
-    setPinnedMessages(data.messages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
-  } else {
-    // Nếu server chỉ gửi messageId, fetch lại danh sách
-    fetchPinnedMessages();
-  }
-};
-
-    const handleMessageUnpinned = (data) => {
-  console.log('Received messageUnpinned event in ChatWindow:', data);
-  if (data.messages) {
-    // Server trả về danh sách tin nhắn ghim mới
-    setPinnedMessages(data.messages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
-  } else {
-    // Nếu server chỉ gửi messageId, fetch lại danh sách
-    fetchPinnedMessages();
-  }
-};
-
-const fetchPinnedMessages = async () => {
-    try {
-      const otherUserId = chat.isGroup ? chat.groupId : chat.userId;
-      const response = await axios.get(`http://localhost:3000/api/messages/pinned/${otherUserId}`, {
-        headers: { Authorization: `Bearer ${token.trim()}` },
-      });
-      if (response.data.success) {
-        setPinnedMessages(response.data.messages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
-      } else {
-        console.error('Không thể lấy tin nhắn ghim:', response.data.message);
-        setPinnedMessages([]);
-      }
-    } catch (error) {
-      console.error('Lỗi khi lấy tin nhắn ghim:', error);
-      setPinnedMessages([]);
-    }
-  };
 
     if (chatSocketRef.current) {
       chatSocketRef.current.on('receiveMessage', handleReceiveMessage);
       chatSocketRef.current.on('messageStatus', handleMessageStatus);
       chatSocketRef.current.on('messageRecalled', handleMessageRecalled);
       chatSocketRef.current.on('messageDeleted', handleMessageDeleted);
-      if (!chat.isGroup) {
-        chatSocketRef.current.on('messagePinned', handleMessagePinned);
-        chatSocketRef.current.on('messageUnpinned', handleMessageUnpinned);
-      }
     }
 
     if (chat.isGroup && groupSocketRef.current) {
       groupSocketRef.current.on('newGroupMessage', handleReceiveMessage);
-      groupSocketRef.current.on('messagePinned', handleMessagePinned);
-      groupSocketRef.current.on('messageUnpinned', handleMessageUnpinned);
     }
 
-    fetchMessages(true);
     fetchRecentChats();
     if (!chat?.isGroup) {
       fetchFriendStatus();
@@ -318,24 +337,26 @@ const fetchPinnedMessages = async () => {
     }
     markMessagesAsSeen();
 
+    const messageList = messageListRef.current;
+    if (messageList) {
+      messageList.addEventListener('scroll', handleScroll);
+    }
+
     return () => {
       if (chatSocketRef.current) {
         chatSocketRef.current.off('receiveMessage', handleReceiveMessage);
         chatSocketRef.current.off('messageStatus', handleMessageStatus);
         chatSocketRef.current.off('messageRecalled', handleMessageRecalled);
         chatSocketRef.current.off('messageDeleted', handleMessageDeleted);
-        if (!chat.isGroup) {
-          chatSocketRef.current.off('messagePinned', handleMessagePinned);
-          chatSocketRef.current.off('messageUnpinned', handleMessageUnpinned);
-        }
       }
       if (chat.isGroup && groupSocketRef.current) {
         groupSocketRef.current.off('newGroupMessage', handleReceiveMessage);
-        groupSocketRef.current.off('messagePinned', handleMessagePinned);
-        groupSocketRef.current.off('messageUnpinned', handleMessageUnpinned);
+      }
+      if (messageList) {
+        messageList.removeEventListener('scroll', handleScroll);
       }
     };
-  }, [chat, currentUserId, token, navigate, newMessageHighlights, unreadCounts]);
+  }, [chat, currentUserId, token, navigate, newMessageHighlights, unreadCounts, recentMessages]);
 
   const handleSendMessage = async (data, onComplete) => {
     if (!currentUserId || !chat?.targetUserId || !token) {
@@ -362,13 +383,14 @@ const fetchPinnedMessages = async () => {
       mimeType: data instanceof FormData ? data.get('mimeType') : null,
     };
 
-    setMessages((prev) => {
+    setMessages(prev => {
       if (!Array.isArray(prev)) return [tempMessage];
       const updatedMessages = [...prev, tempMessage];
-      setMessageCache((prevCache) => ({
+      setMessageCache(prevCache => ({
         ...prevCache,
         [chat.targetUserId]: updatedMessages,
       }));
+      localStorage.setItem(`messages:${chat.targetUserId}`, JSON.stringify(updatedMessages));
       return updatedMessages;
     });
 
@@ -387,29 +409,30 @@ const fetchPinnedMessages = async () => {
           },
         };
 
-        socket.emit(eventName, messageData, (response) => {
-          setMessages((prev) => {
+        socket.emit(eventName, messageData, response => {
+          setMessages(prev => {
             if (!Array.isArray(prev)) return prev;
             if (response.success) {
-              const updatedMessages = prev.map((msg) =>
+              const updatedMessages = prev.map(msg =>
                 msg.tempId === tempId ? { ...response.data, id: response.data.messageId } : msg
               );
-              setMessageCache((prevCache) => ({
+              setMessageCache(prevCache => ({
                 ...prevCache,
                 [chat.targetUserId]: updatedMessages,
               }));
+              localStorage.setItem(`messages:${chat.targetUserId}`, JSON.stringify(updatedMessages));
               return updatedMessages;
             } else {
-              const updatedMessages = prev.map((msg) =>
+              const updatedMessages = prev.map(msg =>
                 msg.tempId === tempId
                   ? { ...msg, status: 'error', errorMessage: response.message || 'Gửi file thất bại' }
                   : msg
               );
-              setMessageCache((prevCache) => ({
+              setMessageCache(prevCache => ({
                 ...prevCache,
                 [chat.targetUserId]: updatedMessages,
               }));
-              console.log('Error sending file:', response.message || 'Unknown error');
+              localStorage.setItem(`messages:${chat.targetUserId}`, JSON.stringify(updatedMessages));
               return updatedMessages;
             }
           });
@@ -417,18 +440,18 @@ const fetchPinnedMessages = async () => {
         });
       } catch (error) {
         console.error('Error sending file:', error);
-        setMessages((prev) => {
+        setMessages(prev => {
           if (!Array.isArray(prev)) return prev;
-          const updatedMessages = prev.map((msg) =>
+          const updatedMessages = prev.map(msg =>
             msg.tempId === tempId
               ? { ...msg, status: 'error', errorMessage: 'Không thể gửi file' }
               : msg
           );
-          setMessageCache((prevCache) => ({
+          setMessageCache(prevCache => ({
             ...prevCache,
             [chat.targetUserId]: updatedMessages,
           }));
-          console.log('Error sending file:', error.message);
+          localStorage.setItem(`messages:${chat.targetUserId}`, JSON.stringify(updatedMessages));
           return updatedMessages;
         });
         onComplete?.();
@@ -441,29 +464,30 @@ const fetchPinnedMessages = async () => {
         content: data.content,
       };
 
-      socket.emit(eventName, messageData, (response) => {
-        setMessages((prev) => {
+      socket.emit(eventName, messageData, response => {
+        setMessages(prev => {
           if (!Array.isArray(prev)) return prev;
           if (response.success) {
-            const updatedMessages = prev.map((msg) =>
+            const updatedMessages = prev.map(msg =>
               msg.tempId === tempId ? { ...response.data, id: response.data.messageId } : msg
             );
-            setMessageCache((prevCache) => ({
+            setMessageCache(prevCache => ({
               ...prevCache,
               [chat.targetUserId]: updatedMessages,
             }));
+            localStorage.setItem(`messages:${chat.targetUserId}`, JSON.stringify(updatedMessages));
             return updatedMessages;
           } else {
-            const updatedMessages = prev.map((msg) =>
+            const updatedMessages = prev.map(msg =>
               msg.tempId === tempId
                 ? { ...msg, status: 'error', errorMessage: response.message || 'Gửi tin nhắn thất bại' }
                 : msg
             );
-            setMessageCache((prevCache) => ({
+            setMessageCache(prevCache => ({
               ...prevCache,
               [chat.targetUserId]: updatedMessages,
             }));
-            console.log('Error sending message:', response.message || 'Unknown error');
+            localStorage.setItem(`messages:${chat.targetUserId}`, JSON.stringify(updatedMessages));
             return updatedMessages;
           }
         });
@@ -472,21 +496,22 @@ const fetchPinnedMessages = async () => {
     }
   };
 
-  const handleRecallMessage = async (messageId) => {
+  const handleRecallMessage = async messageId => {
     let socket = getSocket('/chat');
-    socket.emit('recallMessage', { messageId }, (response) => {
+    socket.emit('recallMessage', { messageId }, response => {
       if (response.success) {
-        setMessages((prev) => {
+        setMessages(prev => {
           if (!Array.isArray(prev)) return prev;
-          const updatedMessages = prev.map((msg) =>
+          const updatedMessages = prev.map(msg =>
             (msg.id === messageId || msg.messageId === messageId || msg.tempId === messageId)
               ? { ...msg, status: 'recalled' }
               : msg
           );
-          setMessageCache((prevCache) => ({
+          setMessageCache(prevCache => ({
             ...prevCache,
             [chat.targetUserId]: updatedMessages,
           }));
+          localStorage.setItem(`messages:${chat.targetUserId}`, JSON.stringify(updatedMessages));
           return updatedMessages;
         });
       } else {
@@ -495,24 +520,25 @@ const fetchPinnedMessages = async () => {
     });
   };
 
-  const handleDeleteMessage = async (messageId) => {
+  const handleDeleteMessage = async messageId => {
     if (chat.isGroup) {
       alert('Chức năng xóa tin nhắn nhóm hiện chưa được hỗ trợ.');
       return;
     }
 
     let socket = getSocket('/chat');
-    socket.emit('deleteMessage', { messageId }, (response) => {
+    socket.emit('deleteMessage', { messageId }, response => {
       if (response.success) {
-        setMessages((prev) => {
+        setMessages(prev => {
           if (!Array.isArray(prev)) return prev;
           const updatedMessages = prev.filter(
-            (msg) => msg.id !== messageId && msg.messageId !== messageId && msg.tempId !== messageId
+            msg => msg.id !== messageId && msg.messageId !== messageId && msg.tempId !== messageId
           );
-          setMessageCache((prevCache) => ({
+          setMessageCache(prevCache => ({
             ...prevCache,
             [chat.targetUserId]: updatedMessages,
           }));
+          localStorage.setItem(`messages:${chat.targetUserId}`, JSON.stringify(updatedMessages));
           return updatedMessages;
         });
       } else {
@@ -523,7 +549,7 @@ const fetchPinnedMessages = async () => {
 
   const handleForwardMessage = async (messageId, targetUserId) => {
     let socket = getSocket('/chat');
-    socket.emit('forwardMessage', { messageId, targetReceiverId: targetUserId }, (response) => {
+    socket.emit('forwardMessage', { messageId, targetReceiverId: targetUserId }, response => {
       if (!response.success) {
         alert('Không thể chuyển tiếp tin nhắn. Vui lòng thử lại.');
       }
@@ -537,8 +563,7 @@ const fetchPinnedMessages = async () => {
         { receiverId: chat.targetUserId, message: `Xin chào, mình là ${currentUser.name}, hãy kết bạn với mình nhé!` },
         { headers: { Authorization: `Bearer ${token.trim()}` } }
       );
-
-      if (response.data && response.data.success) {
+      if (response.data?.success) {
         alert('Đã gửi yêu cầu kết bạn thành công!');
         setFriendStatus('pending_sent');
       } else {
@@ -558,18 +583,15 @@ const fetchPinnedMessages = async () => {
       const response = await axios.get('http://localhost:3000/api/friends/received', {
         headers: { Authorization: `Bearer ${token.trim()}` },
       });
-
       if (!response.data || !Array.isArray(response.data)) {
         alert('Không tìm thấy danh sách lời mời kết bạn.');
         return;
       }
-
-      const request = response.data.find((req) => req.senderId === chat.targetUserId);
+      const request = response.data.find(req => req.senderId === chat.targetUserId);
       if (!request) {
         alert('Không tìm thấy lời mời kết bạn từ người này.');
         return;
       }
-
       const acceptResponse = await axios.post(
         'http://localhost:3000/api/friends/accept',
         {},
@@ -578,8 +600,7 @@ const fetchPinnedMessages = async () => {
           params: { requestId: request.requestId },
         }
       );
-
-      if (acceptResponse.data && acceptResponse.data.success) {
+      if (acceptResponse.data?.success) {
         alert('Đã chấp nhận lời mời kết bạn!');
         setFriendStatus('friend');
       } else {
@@ -598,20 +619,20 @@ const fetchPinnedMessages = async () => {
     if (chat.isGroup) {
       alert('Chức năng thêm thành viên nhóm sẽ được triển khai sau!');
     } else {
-      setIsCreateGroupModalOpen(true);
+      setIsModalOpen(true);
     }
   };
 
-  const handleGroupCreated = (newGroup) => {
+  const handleGroupCreated = newGroup => {
     alert(`Nhóm "${newGroup.name}" đã được tạo thành công!`);
-    setIsCreateGroupModalOpen(false);
+    setIsModalOpen(false);
   };
 
   const normalizedChat = {
     ...chat,
     userId: chat?.isGroup ? null : chat?.targetUserId,
     groupId: chat?.isGroup ? chat?.targetUserId : null,
-    isGroup: !!chat?.isGroup, // Đảm bảo isGroup luôn là boolean
+    isGroup: !!chat?.isGroup,
   };
 
   return (
@@ -670,12 +691,13 @@ const fetchPinnedMessages = async () => {
         onForwardMessage={handleForwardMessage}
         chat={normalizedChat}
         socket={chat.isGroup ? groupSocketRef.current : chatSocketRef.current}
+        messageListRef={messageListRef}
       />
       <MessageInput onSendMessage={handleSendMessage} chat={normalizedChat} />
 
       <CreateGroupModal
         isOpen={isCreateGroupModalOpen}
-        onClose={() => setIsCreateGroupModalOpen(false)}
+        onClose={() => setIsModalOpen(false)}
         onGroupCreated={handleGroupCreated}
         preSelectedUser={chat?.isGroup ? null : chat?.targetUserId}
       />
