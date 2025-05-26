@@ -22,6 +22,7 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
   const token = localStorage.getItem('token');
   const chatSocketRef = useRef(null);
   const groupSocketRef = useRef(null);
+  const [pinnedMessages, setPinnedMessages] = useState([]);
 
   useEffect(() => {
     if (!currentUserId || !token || !chat?.targetUserId) {
@@ -251,59 +252,45 @@ const ChatWindow = ({ chat, toggleInfo, isInfoVisible, newMessageHighlights, unr
       });
     };
 
-    const handleMessagePinned = async (data) => {
-      console.log('Received messagePinned event in ChatWindow:', data);
-      try {
-        const otherUserId = chat.isGroup ? chat.groupId : chat.userId;
-        const response = await axios.get(`http://localhost:3000/api/messages/pinned/${otherUserId}`, {
-          headers: { Authorization: `Bearer ${token.trim()}` },
-        });
+    const handleMessagePinned = (data) => {
+  console.log('Received messagePinned event in ChatWindow:', data);
+  if (data.messages) {
+    // Server trả về danh sách tin nhắn ghim mới
+    setPinnedMessages(data.messages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
+  } else {
+    // Nếu server chỉ gửi messageId, fetch lại danh sách
+    fetchPinnedMessages();
+  }
+};
 
-        if (response.data.success) {
-          const sortedMessages = (response.data.messages || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-          setMessages((prev) => {
-            const updatedMessages = [...prev];
-            setMessageCache((prevCache) => ({
-              ...prevCache,
-              [chat.targetUserId]: updatedMessages,
-            }));
-            return updatedMessages;
-          });
-          setMessages((prev) => [...prev]);
-        } else {
-          console.error('Không thể lấy tin nhắn ghim:', response.data.message);
-        }
-      } catch (error) {
-        console.error('Lỗi khi cập nhật tin nhắn ghim qua socket:', error);
+    const handleMessageUnpinned = (data) => {
+  console.log('Received messageUnpinned event in ChatWindow:', data);
+  if (data.messages) {
+    // Server trả về danh sách tin nhắn ghim mới
+    setPinnedMessages(data.messages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
+  } else {
+    // Nếu server chỉ gửi messageId, fetch lại danh sách
+    fetchPinnedMessages();
+  }
+};
+
+const fetchPinnedMessages = async () => {
+    try {
+      const otherUserId = chat.isGroup ? chat.groupId : chat.userId;
+      const response = await axios.get(`http://localhost:3000/api/messages/pinned/${otherUserId}`, {
+        headers: { Authorization: `Bearer ${token.trim()}` },
+      });
+      if (response.data.success) {
+        setPinnedMessages(response.data.messages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
+      } else {
+        console.error('Không thể lấy tin nhắn ghim:', response.data.message);
+        setPinnedMessages([]);
       }
-    };
-
-    const handleMessageUnpinned = async (data) => {
-      console.log('Received messageUnpinned event in ChatWindow:', data);
-      try {
-        const otherUserId = chat.isGroup ? chat.groupId : chat.userId;
-        const response = await axios.get(`http://localhost:3000/api/messages/pinned/${otherUserId}`, {
-          headers: { Authorization: `Bearer ${token.trim()}` },
-        });
-
-        if (response.data.success) {
-          const sortedMessages = (response.data.messages || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-          setMessages((prev) => {
-            const updatedMessages = [...prev];
-            setMessageCache((prevCache) => ({
-              ...prevCache,
-              [chat.targetUserId]: updatedMessages,
-            }));
-            return updatedMessages;
-          });
-          setMessages((prev) => [...prev]);
-        } else {
-          console.error('Không thể lấy tin nhắn ghim:', response.data.message);
-        }
-      } catch (error) {
-        console.error('Lỗi khi cập nhật tin nhắn ghim qua socket:', error);
-      }
-    };
+    } catch (error) {
+      console.error('Lỗi khi lấy tin nhắn ghim:', error);
+      setPinnedMessages([]);
+    }
+  };
 
     if (chatSocketRef.current) {
       chatSocketRef.current.on('receiveMessage', handleReceiveMessage);

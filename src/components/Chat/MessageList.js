@@ -24,14 +24,14 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
   // Lấy danh sách tin nhắn ghim khi component mount hoặc chat thay đổi
   useEffect(() => {
     const fetchPinnedMessages = async () => {
-      if (!chat || (!chat.isGroup && !chat.userId) || (chat.isGroup && !chat.groupId)) {
+      if (!chat || (!chat.isGroup && !chat.userId) || (chat.isGroup && !chat.targetUserId)) {
         console.warn('Chat object is invalid or missing required properties:', chat);
         setPinnedMessages([]);
         return;
       }
 
       try {
-        const otherUserId = chat.isGroup ? chat.groupId : chat.userId;
+        const otherUserId = chat.isGroup ? chat.targetUserId : chat.userId;
         const response = await fetch(`http://localhost:3000/api/messages/pinned/${otherUserId}`, {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('token')}`,
@@ -64,34 +64,13 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
   useEffect(() => {
     if (!chat || !socket) return;
 
-    const otherUserId = chat.isGroup ? chat.groupId : chat.userId;
-    const conversationRoom = `conversation:${[currentUserId, otherUserId].sort().join(':')}`;
-    console.log('Listening for pinned messages in room:', conversationRoom);
+    // Sử dụng phòng đúng dựa trên loại chat
+    const room = chat.isGroup ? `group:${chat.targetUserId}` : `conversation:${[currentUserId, chat.userId].sort().join(':')}`;
 
-    const handlePinnedMessageUpdate = async (data) => {
+    const handlePinnedMessageUpdate = (data) => {
       console.log('Received messagePinned/messageUnpinned event:', data);
-      try {
-        const { messageId } = data;
-        const response = await fetch(`http://localhost:3000/api/messages/pinned/${otherUserId}`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! Status: ${response.status}`);
-        }
-
-        const result = await response.json();
-        if (result.success) {
-          const sortedMessages = (result.messages || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-          setPinnedMessages(sortedMessages);
-          console.log('Updated pinned messages:', sortedMessages);
-        } else {
-          console.error('Không thể lấy tin nhắn ghim:', result.message);
-        }
-      } catch (error) {
-        console.error('Lỗi khi cập nhật tin nhắn ghim qua socket:', error);
+      if (data.messages) {
+        setPinnedMessages(data.messages);
       }
     };
 
@@ -227,121 +206,40 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
     setPinnedContextMenu({ visible: false, message: null, messageIndex: null });
   };
 
-  const handlePinMessage = async (messageId) => {
-    try {
-      const isGroupChat = chat?.isGroup;
-      const endpoint = isGroupChat
-        ? `http://localhost:3000/api/groups/pin/messages/${chat.groupId}/${messageId}`
-        : `http://localhost:3000/api/messages/pin/${messageId}`;
-      const method = isGroupChat ? 'PUT' : 'PATCH';
+  const handlePinMessage = (messageId) => {
+    if (!chat || !socket) return;
 
-      const response = await fetch(endpoint, {
-        method,
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
+    const room = chat.isGroup ? `group:${chat.targetUserId}` : `conversation:${[currentUserId, chat.userId].sort().join(':')}`;
+    
+    // Sử dụng tên sự kiện đúng dựa trên loại chat
+    const eventName = chat.isGroup ? 'pinGroupMessage' : 'pinMessage';
+    socket.emit(eventName, { messageId, room, groupId: chat.isGroup ? chat.targetUserId : null }, (response) => {
+      if (!response.success) {
+        alert(`Không thể ghim tin nhắn: ${response.message}`);
       }
-
-      const result = await response.json();
-      if (result.success) {
-        const otherUserId = chat?.isGroup ? chat.groupId : chat?.userId;
-        const pinnedResponse = await fetch(`http://localhost:3000/api/messages/pinned/${otherUserId}`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-          },
-        });
-
-        if (!pinnedResponse.ok) {
-          throw new Error(`HTTP error! Status: ${pinnedResponse.status}`);
-        }
-
-        const pinnedResult = await pinnedResponse.json();
-        if (pinnedResult.success) {
-          const sortedMessages = (pinnedResult.messages || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-          setPinnedMessages(sortedMessages);
-        } else {
-          alert('Không thể lấy danh sách tin nhắn ghim mới: ' + pinnedResult.message);
-        }
-      } else {
-        alert('Không thể ghim tin nhắn: ' + result.message);
-      }
-    } catch (error) {
-      console.error('Lỗi khi ghim tin nhắn:', error);
-      alert('Đã xảy ra lỗi khi ghim tin nhắn. Vui lòng thử lại sau.');
-    }
+    });
   };
 
-  const handleUnpinMessage = async () => {
-    if (!messageToUnpin) return;
+  const handleUnpinMessage = () => {
+    if (!messageToUnpin || !chat || !socket) return;
 
-    try {
-      const isGroupChat = chat?.isGroup;
-      if (!isGroupChat && !chat?.userId) {
-        console.error('Invalid chat configuration:', chat);
-        alert('Cấu hình chat không hợp lệ. Vui lòng thử lại.');
-        return;
-      }
-      if (isGroupChat && !chat?.groupId) {
-        console.error('Missing groupId for group chat:', chat);
-        alert('Không tìm thấy ID nhóm. Vui lòng thử lại.');
-        return;
-      }
-
-      const messageId = messageToUnpin.id || messageToUnpin.messageId;
-      const endpoint = isGroupChat
-        ? `http://localhost:3000/api/groups/pin/messages/${chat.groupId}/${messageId}`
-        : `http://localhost:3000/api/messages/pin/${messageId}`;
-
-      console.log('Calling unpin endpoint:', endpoint);
-
-      const response = await fetch(endpoint, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Unpin error response:', errorData);
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      if (result.success) {
-        const otherUserId = isGroupChat ? chat.groupId : chat.userId;
-        const pinnedResponse = await fetch(`http://localhost:3000/api/messages/pinned/${otherUserId}`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-          },
-        });
-
-        if (!pinnedResponse.ok) {
-          throw new Error(`HTTP error! Status: ${pinnedResponse.status}`);
-        }
-
-        const pinnedResult = await pinnedResponse.json();
-        if (pinnedResult.success) {
-          const sortedMessages = (pinnedResult.messages || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-          setPinnedMessages(sortedMessages);
-        } else {
-          alert('Không thể lấy danh sách tin nhắn ghim mới: ' + pinnedResult.message);
-        }
+    const messageId = messageToUnpin.id || messageToUnpin.messageId;
+    const room = chat.isGroup ? `group:${chat.targetUserId}` : `conversation:${[currentUserId, chat.userId].sort().join(':')}`;
+    
+    // Sử dụng tên sự kiện đúng dựa trên loại chat
+    const eventName = chat.isGroup ? 'unpinGroupMessage' : 'unpinMessage';
+    socket.emit(eventName, { 
+      messageId, 
+      room, 
+      groupId: chat.isGroup ? chat.targetUserId : null 
+    }, (response) => {
+      if (response.success) {
+        setShowUnpinModal(false);
+        setMessageToUnpin(null);
       } else {
-        alert('Không thể bỏ ghim tin nhắn: ' + result.message);
+        alert(`Không thể bỏ ghim tin nhắn: ${response.message}`);
       }
-    } catch (error) {
-      console.error('Lỗi khi bỏ ghim tin nhắn:', error);
-      alert('Đã xảy ra lỗi khi bỏ ghim tin nhắn. Vui lòng thử lại sau.');
-    }
-
-    setShowUnpinModal(false);
-    setMessageToUnpin(null);
+    });
   };
 
   const cancelUnpin = () => {
@@ -406,8 +304,14 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                     <div className="pinned-message-label">Tin nhắn</div>
                     <div className="pinned-message-details">
                       <span className="pinned-message-sender">
-                        {pinnedMessages[0].sender?.name || (chat?.isGroup ? 'Thành viên nhóm' : chat?.name || 'Không xác định')}:
-                      </span>
+                          {(() => {
+                            const senderId = pinnedMessages[0].senderId || pinnedMessages[0].sender?.userId;
+                            if (senderId === currentUserId) {
+                              return JSON.parse(localStorage.getItem('user') || '{}')?.name || 'Bạn';
+                            }
+                            return pinnedMessages[0].sender?.name || chat?.name || 'Không xác định';
+                          })()}:
+                        </span>
                       <span className="pinned-message-content">
                         {pinnedMessages[0].type === 'text' ? pinnedMessages[0].content : `(${pinnedMessages[0].type})`}
                       </span>
@@ -464,8 +368,14 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                         <div className="pinned-message-label">Tin nhắn</div>
                         <div className="pinned-message-details">
                           <span className="pinned-message-sender">
-                            {msg.sender?.name || (chat?.isGroup ? 'Thành viên nhóm' : chat?.name || 'Không xác định')}:
-                          </span>
+                              {(() => {
+                                const senderId = msg.senderId || msg.sender?.userId;
+                                if (senderId === currentUserId) {
+                                  return JSON.parse(localStorage.getItem('user') || '{}')?.name || 'Bạn';
+                                }
+                                return msg.sender?.name || chat?.name || 'Không xác định';
+                              })()}:
+                            </span>
                           <span className="pinned-message-content">
                             {msg.type === 'text' ? msg.content : `(${msg.type})`}
                           </span>
