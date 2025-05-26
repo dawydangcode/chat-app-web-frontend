@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import '../../assets/styles/ConversationInfo.css';
-import { FaUsers, FaImages, FaFileAlt, FaLink, FaLock, FaDownload, FaShare, FaEllipsisH } from 'react-icons/fa';
+import { FaUsers, FaImages, FaFileAlt, FaLink, FaLock, FaDownload, FaShare, FaEllipsisH, FaBellSlash, FaUsersCog, FaPen } from 'react-icons/fa';
+import { LuPin, LuPinOff } from 'react-icons/lu';
 import { BiSolidRightArrow, BiSolidDownArrow } from "react-icons/bi";
 import { RiGroupLine } from "react-icons/ri";
 import { LiaStopwatchSolid } from "react-icons/lia";
 import { MdToggleOff, MdToggleOn } from "react-icons/md";
-import { IoWarningOutline } from "react-icons/io5";
+import { IoWarningOutline, IoSettingsOutline  } from "react-icons/io5";
 import { VscTrash } from "react-icons/vsc";
 import { RxExit } from "react-icons/rx";
+import { AiOutlineUsergroupAdd } from "react-icons/ai";
 
 
 // Hàm tính thời gian gửi file
@@ -63,6 +65,7 @@ const GroupConversationInfo = ({ chat }) => {
   });
   const [contextMenu, setContextMenu] = useState(null);
   const [isHidden, setIsHidden] = useState(false); // Trạng thái ẩn trò chuyện
+  const [isMuted, setIsMuted] = useState(false); // Trạng thái tắt thông báo
   const contextMenuRef = useRef(null);
 
   const token = localStorage.getItem('token');
@@ -238,10 +241,10 @@ const GroupConversationInfo = ({ chat }) => {
         return 'https://chat.zalo.me/assets/icon-photo.1ef82b2ce3e302f5e186a8c54f74252f.svg';
       case 'doc':
       case 'docx':
-        return 'https://chat.zalo.me/assets/icon-word.398880844ced42f82eba2ace17f5d511.svg';
+        return 'https://chat.zalo.me/assets/styles/icon-word.398880e44ced42f82eba2ace17f5d511.svg';
       case 'xls':
       case 'xlsx':
-        return 'https://chat.zalo.me/assets/icon-excel.8a677940b84360d0a750fc4470354191.svg';
+        return 'https://chat.zalo.me/assets/styles/icon-excel.8a677940b84360d0a750fc4470354191.svg';
       default:
         return 'https://chat.zalo.me/assets/icon-file.1d5f8d6e2d1e7b4927a8e672d3d8f81.svg';
     }
@@ -293,6 +296,27 @@ const GroupConversationInfo = ({ chat }) => {
     alert('Chức năng báo xấu sẽ được triển khai sau!');
   };
 
+  const handleMuteNotifications = () => {
+    setIsMuted(!isMuted);
+    alert(`${isMuted ? 'Bật' : 'Tắt'} thông báo (Chức năng sẽ được triển khai sau!)`);
+  };
+
+  const handlePinConversation = () => {
+    if (chat.isPinned) {
+      chat.onUnpinConversation();
+    } else {
+      chat.onPinConversation();
+    }
+  };
+
+  const handleAddMemberIntoGroupChat = () => {
+    alert('Thêm thành viên vào nhóm trò chuyện (Chức năng sẽ được triển khai sau!)');
+  };
+
+  const handleManageGroup = () => {
+    alert('Quản lý nhóm (Chức năng sẽ được triển khai sau!)');
+  };
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (contextMenuRef.current && !contextMenuRef.current.contains(event.target)) {
@@ -312,14 +336,14 @@ const GroupConversationInfo = ({ chat }) => {
       <div className="members-page">
         <div className="members-header">
           <button className="back-btn" onClick={() => setIsMembersPage(false)}>
-            ← Thông tin nhóm
+            ← Thành viên
           </button>
         </div>
         <div className="members-section">
-          <p>Danh sách thành viên ({members.length})</p>
           <button className="add-member-btn-info" onClick={handleAddMember}>
             Thêm thành viên
           </button>
+                    <p style={{fontWeight:500, color: 'black'}}>Danh sách thành viên ({members.length})</p>
           <div className="members-list">
             {members.length > 0 ? (
               members.map((member) => (
@@ -441,8 +465,26 @@ const GroupConversationInfo = ({ chat }) => {
         />
         <div className="group-name-container">
           <h3>{groupName}</h3>
-          <button className="edit-group-name-btn" onClick={() => setIsEditGroupNameModalOpen(true)}>
-            ✏️
+          <button className="edit-nickname-btn" onClick={() => setIsEditGroupNameModalOpen(true)} title="Đổi tên nhóm">
+            <FaPen size={14} />
+          </button>
+        </div>
+        <div className="header-actions">
+          <button className="header-action-btn" onClick={handleMuteNotifications} title={isMuted ? "Bật thông báo" : "Tắt thông báo"}>
+            <FaBellSlash size={18} />
+          </button>
+          <button
+            className={`header-action-btn ${chat?.isPinned ? 'header-action-btn--pinned' : ''}`}
+            onClick={handlePinConversation}
+            title={chat?.isPinned ? "Bỏ ghim hội thoại" : "Ghim hội thoại"}
+          >
+            {chat?.isPinned ? <LuPinOff size={18} /> : <LuPin size={18} />}
+          </button>
+          <button className="header-action-btn" onClick={handleAddMemberIntoGroupChat} title="Thêm thành viên">
+            <AiOutlineUsergroupAdd size={18} />
+          </button>
+          <button className="header-action-btn" onClick={handleManageGroup} title="Quản lý nhóm">
+            <IoSettingsOutline  size={18} />
           </button>
         </div>
       </div>
@@ -648,7 +690,7 @@ const GroupConversationInfo = ({ chat }) => {
               </div>
             </div>
             <div className="security-item" onClick={() => setIsLeaveGroupModalOpen(true)}>
-              <RxExit  size={24} className="security-item-icon danger-text" />
+              <RxExit size={24} className="security-item-icon danger-text" />
               <div className="security-item-info">
                 <p className="security-item-subtitle" style={{ color: '#c31818', fontWeight:500 }}>Rời nhóm</p>
               </div>

@@ -518,7 +518,10 @@
   cursor: pointer;
   margin-bottom: 20px;
   font-size: 0.9rem;
-  width: 100%;
+  width: 95%;
+  margin-right: 10px;
+  margin-left: 10px;
+  font-weight: 500;
 }
 
 .add-member-btn-info:hover {
@@ -562,11 +565,12 @@
   margin: 0;
   font-size: 0.9rem;
   font-weight: 500;
+  color: #081b3a;
 }
 
 .admin-label {
   font-size: 0.8rem;
-  color: #005AE0;
+  color: #22324d;
   font-weight: 500;
 }
 
@@ -619,4 +623,26 @@
 .section-content {
   margin-top: 10px;
   height: fit-content;
+}
+
+/* Members preview */
+.members-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.members-preview-avatars {
+  display: flex;
+  gap: 5px;
+  padding-left: 10px;
+}
+
+.member-preview-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }

@@ -1,0 +1,104 @@
+.forward-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.forward-modal-content {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  max-width: 400px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.forward-modal-content h3 {
+  margin: 0 0 15px 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.conversation-list {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: 15px;
+}
+
+.conversation-item {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  cursor: pointer;
+  border-radius: 5px;
+  transition: background-color 0.2s ease;
+}
+
+.conversation-item:hover {
+  background-color: #f0f2f5;
+}
+
+.conversation-item.selected {
+  background-color: #e5f1ff;
+}
+
+.conversation-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  margin-right: 10px;
+  object-fit: cover;
+}
+
+.conversation-name {
+  flex: 1;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #333;
+}
+
+.forward-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.forward-modal-actions button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.forward-modal-actions .forward-btn {
+  background-color: #005AE0;
+  color: white;
+}
+
+.forward-modal-actions .forward-btn:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+.forward-modal-actions .forward-btn:hover:not(:disabled) {
+  background-color: #0041a8;
+}
+
+.forward-modal-actions .cancel-btn {
+  background-color: #f0f0f0;
+  color: #333;
+}
+
+.forward-modal-actions .cancel-btn:hover {
+  background-color: #e0e0e0;
+}

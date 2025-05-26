@@ -5,6 +5,7 @@ import { FaUndo, FaTrash, FaShare, FaReply, FaCopy, FaThumbtack, FaChevronUp, Fa
 import { BiMessageRoundedDetail } from 'react-icons/bi';
 import { LuCheckCheck, LuCheck } from 'react-icons/lu';
 import { IoChevronDownSharp } from 'react-icons/io5';
+import ForwardMessageModal from './ForwardMessageModal';
 
 const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, onForwardMessage, chat, socket, messageListRef }) => {
   const currentUserId = JSON.parse(localStorage.getItem('user') || '{}')?.userId;
@@ -19,6 +20,8 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
   const [pinnedContextMenu, setPinnedContextMenu] = useState({ visible: false, message: null, messageIndex: null });
   const [showUnpinModal, setShowUnpinModal] = useState(false);
   const [messageToUnpin, setMessageToUnpin] = useState(null);
+  const [showForwardModal, setShowForwardModal] = useState(false);
+  const [messageToForward, setMessageToForward] = useState(null);
 
   const fetchPinnedMessages = async () => {
     if (!chat || (!chat.isGroup && !chat.userId) || (chat.isGroup && !chat.targetUserId)) {
@@ -212,10 +215,8 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
         console.log('Reply to message:', message);
         break;
       case 'forward':
-        const targetUserId = prompt('Nhập ID người nhận để chuyển tiếp:');
-        if (targetUserId) {
-          onForwardMessage(message.id || message.messageId, targetUserId);
-        }
+        setMessageToForward(message.id || message.messageId);
+        setShowForwardModal(true);
         break;
       case 'copy':
         navigator.clipboard.writeText(message.content || '');
@@ -286,6 +287,11 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
   const cancelUnpin = () => {
     setShowUnpinModal(false);
     setMessageToUnpin(null);
+  };
+
+  const handleCloseForwardModal = () => {
+    setShowForwardModal(false);
+    setMessageToForward(null);
   };
 
   if (!Array.isArray(messages)) {
@@ -534,86 +540,112 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                       ))}
                     </div>
                   ) : (
-                    <div
-                      className="message-content"
-                      onContextMenu={e => handleContextMenu(e, lastMessage)}
-                    >
-                      {chat?.isGroup && showAvatarAndName && !isGroupMessage && (
-                        <span className="message-sender-name-inline">
-                          {firstMessage.sender?.name || 'Thành viên nhóm'}
-                        </span>
+                    <div className="message-content-wrapper-inner">
+                      {!isPending && (
+                        <div className={`message-actions ${isCurrentUser ? 'actions-left' : 'actions-right'}`}>
+                          {isCurrentUser && lastMessage.status !== 'recalled' && (
+                            <button onClick={() => onRecallMessage(lastMessage.id || lastMessage.messageId)}>
+                              <FaUndo />
+                            </button>
+                          )}
+                          {!chat.isGroup && (
+                            <button onClick={() => handleDeleteClick(lastMessage.id || lastMessage.messageId)}>
+                              <FaTrash />
+                            </button>
+                          )}
+                          {lastMessage.status !== 'recalled' && (
+                            <button
+                              onClick={() => {
+                                setMessageToForward(lastMessage.id || lastMessage.messageId);
+                                setShowForwardModal(true);
+                              }}
+                            >
+                              <FaShare />
+                            </button>
+                          )}
+                        </div>
                       )}
-                      {firstMessage.type === 'text' && (
-                        <p style={{ opacity: isPending ? 0.6 : 1 }}>{firstMessage.content}</p>
-                      )}
-                      {firstMessage.type === 'video' && firstMessage.mediaUrl ? (
-                        <div
-                          className="media-message-container"
-                          onContextMenu={e => handleContextMenu(e, lastMessage)}
-                        >
-                          <video
-                            controls
-                            onClick={() => handleMediaClick(firstMessage.mediaUrl, firstMessage.mimeType)}
-                            onError={() => handleMediaError(firstMessage.id || firstMessage.messageId || firstMessage.tempId)}
-                            style={{ cursor: 'pointer', opacity: isPending ? 0.6 : 1 }}
+                      <div
+                        className="message-content"
+                        onContextMenu={e => handleContextMenu(e, lastMessage)}
+                      >
+                        {chat?.isGroup && showAvatarAndName && !isGroupMessage && (
+                          <span className="message-sender-name-inline">
+                            {firstMessage.sender?.name || 'Thành viên nhóm'}
+                          </span>
+                        )}
+                        {firstMessage.type === 'text' && (
+                          <p style={{ opacity: isPending ? 0.6 : 1 }}>{firstMessage.content}</p>
+                        )}
+                        {firstMessage.type === 'video' && firstMessage.mediaUrl ? (
+                          <div
+                            className="media-message-container"
+                            onContextMenu={e => handleContextMenu(e, lastMessage)}
                           >
-                            <source src={firstMessage.mediaUrl} type={firstMessage.mimeType} />
-                            Trình duyệt của bạn không hỗ trợ video.
-                          </video>
-                          {isPending && (
-                            <div className="pending-indicator">
-                              <span className="pending-text">Đang gửi</span>
-                            </div>
-                          )}
-                        </div>
-                      ) : null}
-                      {firstMessage.type === 'voice' && firstMessage.mediaUrl ? (
-                        <div
-                          className="media-message-container"
-                          onContextMenu={e => handleContextMenu(e, lastMessage)}
-                        >
-                          <audio controls style={{ opacity: isPending ? 0.6 : 1 }}>
-                            <source src={firstMessage.mediaUrl} type={firstMessage.mimeType} />
-                            Trình duyệt của bạn không hỗ trợ âm thanh.
-                          </audio>
-                          {isPending && (
-                            <div className="pending-indicator">
-                              <span className="pending-text">Đang gửi</span>
-                            </div>
-                          )}
-                        </div>
-                      ) : null}
-                      {(firstMessage.type === 'file' && firstMessage.mediaUrl) ? (
-                        <div
-                          className="media-container"
-                          onContextMenu={e => handleContextMenu(e, lastMessage)}
-                        >
-                          <a href={firstMessage.mediaUrl} target="_blank" rel="noopener noreferrer" style={{ opacity: isPending ? 0.6 : 1 }}>
-                            {firstMessage.fileName || 'File'}
-                          </a>
-                          {isPending && (
-                            <div className="pending-indicator">
-                              <span className="pending-text">Đang gửi</span>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        firstMessage.type !== 'text' && firstMessage.type !== 'voice' && !firstMessage.mediaUrl && (
-                          <p style={{ opacity: isPending ? 0.6 : 1 }}>Đang gửi: {firstMessage.fileName || 'Unknown'}</p>
-                        )
-                      )}
-                      {firstMessage.status === 'error' && firstMessage.errorMessage && (
-                        <p className="error-message">{firstMessage.errorMessage}</p>
-                      )}
-                      {showTime && (
-                        <span className="message-time">
-                          {new Date(lastMessage.timestamp).toLocaleTimeString('vi-VN', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            hour12: false,
-                          })}
-                        </span>
-                      )}
+                            <video
+                              controls
+                              onClick={() => handleMediaClick(firstMessage.mediaUrl, firstMessage.mimeType)}
+                              onError={() => handleMediaError(firstMessage.id || firstMessage.messageId || firstMessage.tempId)}
+                              style={{ cursor: 'pointer', opacity: isPending ? 0.6 : 1 }}
+                            >
+                              <source src={firstMessage.mediaUrl} type={firstMessage.mimeType} />
+                              Trình duyệt của bạn không hỗ trợ video.
+                            </video>
+                            {isPending && (
+                              <div className="pending-indicator">
+                                <span className="pending-text">Đang gửi</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : null}
+                        {firstMessage.type === 'voice' && firstMessage.mediaUrl ? (
+                          <div
+                            className="media-message-container"
+                            onContextMenu={e => handleContextMenu(e, lastMessage)}
+                          >
+                            <audio controls style={{ opacity: isPending ? 0.6 : 1 }}>
+                              <source src={firstMessage.mediaUrl} type={firstMessage.mimeType} />
+                              Trình duyệt của bạn không hỗ trợ âm thanh.
+                            </audio>
+                            {isPending && (
+                              <div className="pending-indicator">
+                                <span className="pending-text">Đang gửi</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : null}
+                        {(firstMessage.type === 'file' && firstMessage.mediaUrl) ? (
+                          <div
+                            className="media-container"
+                            onContextMenu={e => handleContextMenu(e, lastMessage)}
+                          >
+                            <a href={firstMessage.mediaUrl} target="_blank" rel="noopener noreferrer" style={{ opacity: isPending ? 0.6 : 1 }}>
+                              {firstMessage.fileName || 'File'}
+                            </a>
+                            {isPending && (
+                              <div className="pending-indicator">
+                                <span className="pending-text">Đang gửi</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          firstMessage.type !== 'text' && firstMessage.type !== 'voice' && !firstMessage.mediaUrl && (
+                            <p style={{ opacity: isPending ? 0.6 : 1 }}>Đang gửi: {firstMessage.fileName || 'Unknown'}</p>
+                          )
+                        )}
+                        {firstMessage.status === 'error' && firstMessage.errorMessage && (
+                          <p className="error-message">{firstMessage.errorMessage}</p>
+                        )}
+                        {showTime && (
+                          <span className="message-time">
+                            {new Date(lastMessage.timestamp).toLocaleTimeString('vi-VN', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              hour12: false,
+                            })}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   )}
                   <div className="message-meta">
@@ -644,32 +676,6 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
                     )}
                   </div>
                 </>
-              )}
-              {!isPending && (
-                <div className="message-actions">
-                  {isCurrentUser && lastMessage.status !== 'recalled' && (
-                    <button onClick={() => onRecallMessage(lastMessage.id || lastMessage.messageId)}>
-                      <FaUndo />
-                    </button>
-                  )}
-                  {!chat.isGroup && (
-                    <button onClick={() => handleDeleteClick(lastMessage.id || lastMessage.messageId)}>
-                      <FaTrash />
-                    </button>
-                  )}
-                  {lastMessage.status !== 'recalled' && (
-                    <button
-                      onClick={() => {
-                        const targetUserId = prompt('Nhập ID người nhận để chuyển tiếp:');
-                        if (targetUserId) {
-                          onForwardMessage(lastMessage.id || lastMessage.messageId, targetUserId);
-                        }
-                      }}
-                    >
-                      <FaShare />
-                    </button>
-                  )}
-                </div>
               )}
             </div>
           </div>
@@ -739,6 +745,14 @@ const MessageList = ({ messages, recentChats, onRecallMessage, onDeleteMessage, 
             </div>
           </div>
         </div>
+      )}
+
+      {showForwardModal && (
+        <ForwardMessageModal
+          messageId={messageToForward}
+          onForwardMessage={onForwardMessage}
+          onClose={handleCloseForwardModal}
+        />
       )}
 
       {fullscreenMedia && (
